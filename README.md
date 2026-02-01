@@ -2,6 +2,7 @@
 
 [![English](https://img.shields.io/badge/lang-English-blue)](README.md)
 [![中文](https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87-red)](README.zh-CN.md)
+[![CI](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml/badge.svg)](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml)
 
 Protocol Microscope is a small Next.js playground for actively learning how LLM chat apps work end-to-end: streaming behavior (TTFB vs token-by-token), agent-like multi-step flows, quotas, and lightweight traces/metrics.
 
