@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      AUTH_SECRET: ci_dummy_secret_ci_dummy_secret_ci_dummy_secret
+      AUTH_GITHUB_ID: ci_dummy_github_id
+      AUTH_GITHUB_SECRET: ci_dummy_github_secret
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/how_agent_work
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test
+
+      - run: npm run typecheck
+
+      - run: npm run build
