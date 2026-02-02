@@ -7,7 +7,7 @@ import { Geist } from "next/font/google";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
-  title: "LLM 协议交互式显微镜",
+  title: "LLM 协议观测台",
   description: "T3 Stack 版：Mock/Real LLM + Auth + Quota + Streaming",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };

@@ -2,15 +2,15 @@
 [![中文](https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87-red)](README.zh-CN.md)
 [![CI](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml/badge.svg)](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml)
 
-# 协议显微镜（Protocol Microscope）
+# 协议观测台（Protocol Observatory）
 
-这是一个用来“主动学习”LLM Chat 应用工作过程的小型 Next.js Playground：重点观察流式行为（TTFB 与逐 token 输出）、类 Agent 的多步流程、额度限制，以及轻量级的 traces/metrics。
+这是一个用来“主动学习”LLM Chat 应用端到端工作过程的小型 Next.js Playground：重点观测流式行为（TTFB 与逐 token 输出）、类 Agent 的多步流程、额度限制，以及轻量级的 traces/metrics。
 
 ## 项目演进 / 打磨思路
 
 这个仓库刻意保留了从探索到收敛的路径：
 
-1. 起点是一个网页动画式的“显微镜”UI，用来可视化 LLM chatbot 的响应过程：首 token 到达需要多久、后续 token 如何持续输出、UI 如何渲染。
+1. 起点是一个网页动画式的“观测面板”UI，用来可视化 LLM chatbot 的响应过程：首 token 到达需要多久、后续 token 如何持续输出、UI 如何渲染。
 2. 随着理解加深，增加了多种场景，包括 coding-agent 风格的流程（观察 tool calls / 多步编排对协议与 UX 的影响）。
 3. 增加 thinking / non-thinking 切换，用于对比不同策略在体验、成本与协议形态上的差异。
 4. 随后把注意力扩展到后端工程要素：SSE 长连接、鉴权、限额、可观测性都变成了“真实需求”。
@@ -30,7 +30,7 @@
 
 ## 架构概览
 
-- 显微镜 UI → 调用 `/api/chat/stream` → 渲染流式输出
+- 观测面板 UI → 调用 `/api/chat/stream` → 渲染流式输出
 - 服务端根据条件选择：mock / real
 - 额度只对真实分支生效
 - 每个请求会产生基础指标与可查询 trace

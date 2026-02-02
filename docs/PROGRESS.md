@@ -10,7 +10,7 @@
 
 - [x] 初始化 T3 工程
 - [x] 建立部署/进度/边界三份文档模板
-- [x] 迁移显微镜 UI（Next.js）并跑通 mock 流式链路
+- [x] 迁移观测面板 UI（Next.js）并跑通 mock 流式链路
 - [x] 接入 GitHub 登录入口（NextAuth）
 - [x] Prisma schema 扩展（额度表）与初始迁移生成
 - [x] /api/chat/stream：额度限制与 429
