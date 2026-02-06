@@ -4,94 +4,110 @@
 [![中文](https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E4%B8%AD%E6%96%87-red)](README.zh-CN.md)
 [![CI](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml/badge.svg)](https://github.com/FrankieLiu04/how-agent-work/actions/workflows/ci.yml)
 
-Protocol Observatory is a small Next.js playground for actively learning how LLM chat apps work end-to-end: streaming behavior (TTFB vs token-by-token), agent-like multi-step flows, quotas, and lightweight traces/metrics.
+**Protocol Observatory** is an interactive playground designed to dissect and visualize the end-to-end lifecycle of LLM chat applications. It serves as a "microscope" for understanding streaming protocols, agentic workflows, rate limiting, and observability.
 
-## Project Journey / Evolution
+This project evolved from a simple visualization tool into a production-ready reference architecture, demonstrating how to build robust AI applications using modern web standards.
 
-This repo is intentionally a “learning log” turned into a deployable project:
+## 🛠 Tech Stack
 
-1. It started as a web animation to visualize what’s happening inside an LLM chatbot UI (how the response appears, how fast the first token arrives, and how the stream continues).
-2. Then it grew into multiple scenarios, including a coding-agent-style flow (to see how tool calls / multi-step orchestration affects the protocol and UX).
-3. A thinking vs non-thinking toggle was added as a practical way to compare UX tradeoffs and protocol patterns.
-4. Backend exploration followed: long-lived SSE, auth, rate limits, and observability became “real requirements”.
-5. Finally, it converged into a T3 Stack app (Next.js + NextAuth + Prisma + env validation) to make the learning artifact production-shaped and easy to deploy.
+Built on the **T3 Stack**, leveraging modern web standards for performance, type safety, and scalability.
 
-## Features
+- **Framework**: [Next.js 15](https://nextjs.org/) (App Router)
+- **Language**: TypeScript
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) (via [Prisma ORM](https://www.prisma.io/))
+- **Auth**: [NextAuth.js](https://next-auth.js.org/) (v5 Beta)
+- **API**: Server-Sent Events (SSE) & [tRPC](https://trpc.io/)
+- **Testing**: Vitest
 
-- Streaming SSE endpoint: `/api/chat/stream` (mock by default, real OpenAI passthrough when configured)
-- GitHub authentication via NextAuth
-- Hourly quota for real calls: 5 requests / user / hour (429 on exceed)
-- Lightweight observability:
-  - Metrics: `/api/metrics`
-  - Traces: `/api/debug/traces` (and trace_id lookup)
-- Prisma migrations included (`prisma/migrations`)
+## ✨ Features
 
-## Architecture (High-Level)
+### 🔬 The Microscope
+A specialized UI component that visualizes the hidden details of LLM interactions:
+- **Streaming Mechanics**: Real-time visualization of Time-to-First-Byte (TTFB) and token generation rates.
+- **Agent Workflows**: Support for multi-step "Thinking" processes vs. direct "Non-Thinking" responses.
+- **Protocol Analysis**: Inspect how tool calls and orchestration affect the user experience.
 
-- UI (Observatory) → fetches `/api/chat/stream` → renders the stream
-- Server route decides:
-  - mock stream (always available)
-  - real OpenAI stream (requires GitHub login + `OPENAI_API_KEY`)
-- Quota is enforced only for real calls
-- Each request emits basic counters, percentiles, and a trace you can inspect
+### 🛡️ Backend & Infrastructure
+- **Hybrid Streaming Engine**:
+  - **Mock Mode**: Zero-latency simulation for UI testing (default).
+  - **Live Mode**: Real-time OpenAI API passthrough (requires Authentication).
+- **Robust Rate Limiting**: Token bucket algorithm implementing strict quotas (e.g., 5 requests/hour/user) to prevent abuse.
+- **Observability**:
+  - **Metrics**: Real-time request counters and latency histograms exposed at `/api/metrics`.
+  - **Tracing**: Detailed request-level tracing for debugging complex agent flows at `/api/debug/traces`.
 
-## Quickstart
+## 📐 Architecture
 
-1. Install deps
+The application follows a clean, unidirectional data flow:
 
+1.  **Client**: The `Microscope` component initiates a persistent **SSE (Server-Sent Events)** connection to `/api/chat/stream`.
+2.  **Gateway**: The Next.js API route authenticates the request via NextAuth and checks rate limits against the PostgreSQL database.
+3.  **Engine**:
+    *   If **Mock**: Generates synthetic tokens based on predefined scenarios.
+    *   If **Live**: Proxies the request to OpenAI, handling stream transformation and backpressure.
+4.  **Observability**: Side-effects asynchronously record metrics and traces to the database, ensuring minimal latency impact on the user request.
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18+
+- Docker (optional, for local Database)
+
+### Installation
+
+1. **Clone and Install**
    ```bash
+   git clone https://github.com/FrankieLiu04/how-agent-work.git
+   cd how-agent-work
    npm install
    ```
 
-2. Start Postgres (local)
-
+2. **Initialize Database**
+   Start a local PostgreSQL instance (or provide your own `DATABASE_URL`):
    ```bash
    ./start-database.sh
    ```
 
-3. Configure env
+3. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   ```
+   *Edit `.env` and fill in the required values (see [Configuration](#configuration)).*
 
-   Copy `.env.example` → `.env` and fill values you need.
-
-4. Apply Prisma migrations
-
+4. **Run Migrations**
    ```bash
    npm run db:migrate
    ```
 
-5. Run dev server
-
+5. **Start Development Server**
    ```bash
    npm run dev
    ```
+   Visit `http://localhost:3000` to explore.
 
-Open http://localhost:3000
+## ⚙️ Configuration
 
-## Environment Variables
+See `.env.example` for the full list of variables.
 
-See `.env.example` for the full list.
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `AUTH_SECRET` | NextAuth secret key (generate with `openssl rand -base64 32`) | Yes |
+| `AUTH_GITHUB_ID` | GitHub OAuth Client ID | Yes |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth Client Secret | Yes |
+| `OPENAI_API_KEY` | OpenAI API Key for live mode | No |
+| `OPENAI_BASE_URL` | Custom OpenAI-compatible gateway URL | No |
 
-Required in production:
+## 📚 Documentation
 
-- `AUTH_SECRET`
-- `AUTH_GITHUB_ID`
-- `AUTH_GITHUB_SECRET`
-- `DATABASE_URL`
+- **Deployment Guide**: [DEPLOY_PUBLIC.md](docs/DEPLOY_PUBLIC.md)
+- **Project Boundaries**: [VIBE_BOUNDARIES.md](docs/VIBE_BOUNDARIES.md)
 
-Optional:
-
-- `OPENAI_API_KEY` (enables real streaming after login)
-- `OPENAI_BASE_URL` (for OpenAI-compatible gateways)
-
-## Deployment
-
-- Public deployment guide: [DEPLOY_PUBLIC.md](docs/DEPLOY_PUBLIC.md)
-- Project boundaries: [VIBE_BOUNDARIES.md](docs/VIBE_BOUNDARIES.md)
-
-## Development Commands
+## 🛠 Development Commands
 
 ```bash
-npm run test
-npm run typecheck
-npm run build
+npm run test        # Run unit tests
+npm run typecheck   # Run TypeScript type checking
+npm run build       # Build for production
 ```
