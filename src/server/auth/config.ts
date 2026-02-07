@@ -32,6 +32,8 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
+  secret: env.AUTH_SECRET,
+  trustHost: env.AUTH_TRUST_HOST ?? !!process.env.VERCEL,
   providers: [
     GitHubProvider({
       clientId: env.AUTH_GITHUB_ID ?? "",

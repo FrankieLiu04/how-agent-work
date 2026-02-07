@@ -20,6 +20,8 @@
 - `AUTH_SECRET`
 - `AUTH_GITHUB_ID`
 - `AUTH_GITHUB_SECRET`
+- `AUTH_URL`（建议，填 https://<你的公网域名>，避免 Host 推断导致 cookie/CSRF 异常）
+- `AUTH_TRUST_HOST=true`（建议，部署在 Vercel/反代后时启用）
 - `DATABASE_URL`
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`（可选）
