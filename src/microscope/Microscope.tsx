@@ -90,8 +90,9 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
     if (event.traceId) setLiveTraceId(event.traceId);
     if (event.context) setProtocolContext(event.context);
     if (event.type === "req") setProtocolTokens([]);
-    if (typeof event.token === "string") {
-      setProtocolTokens((prev) => [...prev, event.token].slice(-240));
+    const token = event.token;
+    if (typeof token === "string") {
+      setProtocolTokens((prev) => [...prev, token].slice(-240));
     }
 
     const entry: ProtocolLogEntry = {
