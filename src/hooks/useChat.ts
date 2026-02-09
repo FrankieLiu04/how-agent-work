@@ -16,12 +16,22 @@ export interface ChatMessage {
 
 export type ChatMode = "chat" | "agent" | "ide" | "cli";
 
+export type ProtocolEvent = {
+  type: "req" | "res" | "info" | "clear";
+  title: string;
+  content?: unknown;
+  token?: string;
+  context?: string;
+  traceId?: string | null;
+};
+
 interface UseChatOptions {
   mode: ChatMode;
   conversationId?: string | null;
   onToolCall?: (toolCall: ToolCall) => Promise<unknown>;
   onError?: (error: Error) => void;
   onSuccess?: () => void;
+  onProtocolEvent?: (event: ProtocolEvent) => void;
 }
 
 interface UseChatReturn {
@@ -70,6 +80,7 @@ export function useChat({
   onToolCall,
   onError,
   onSuccess,
+  onProtocolEvent,
 }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -116,24 +127,43 @@ export function useChat({
       ...(m.toolCalls && { tool_calls: m.toolCalls }),
     }));
 
+    const contextText = apiMessages
+      .map((m) => `[${m.role}] ${m.content ?? ""}`)
+      .join("\n");
+
+    const payload = {
+      model: "deepseek-chat",
+      stream: true,
+      x_mode: mode,
+      conversation_id: conversationId,
+      messages: apiMessages,
+    };
+
     try {
+      onProtocolEvent?.({
+        type: "req",
+        title: "POST /api/chat/stream",
+        content: payload,
+        context: contextText || "(Empty)",
+      });
+
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortController.signal,
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          stream: true,
-          x_mode: mode,
-          conversation_id: conversationId,
-          messages: apiMessages,
-        }),
+        body: JSON.stringify(payload),
       });
 
       // Get trace ID
       const responseTraceId = response.headers.get("x-trace-id");
       if (responseTraceId) {
         setTraceId(responseTraceId);
+        onProtocolEvent?.({
+          type: "info",
+          title: "Trace ID",
+          content: responseTraceId,
+          traceId: responseTraceId,
+        });
       }
 
       if (!response.ok) {
@@ -178,6 +208,7 @@ export function useChat({
           };
 
           const delta = parsed.choices?.[0]?.delta;
+          const rawLine = `data: ${data}`;
           
           // Handle content
           if (delta?.content) {
@@ -189,6 +220,12 @@ export function useChat({
                   : m
               )
             );
+            onProtocolEvent?.({
+              type: "res",
+              title: "SSE: Chunk",
+              content: rawLine,
+              token: delta.content,
+            });
           }
 
           // Handle tool calls
@@ -231,6 +268,11 @@ export function useChat({
                   : m
               )
             );
+            onProtocolEvent?.({
+              type: "res",
+              title: "SSE: Tool Call",
+              content: rawLine,
+            });
           }
 
           // Check for finish
@@ -271,6 +313,12 @@ export function useChat({
         }
       }
 
+      onProtocolEvent?.({
+        type: "info",
+        title: "SSE: [DONE]",
+        content: "[DONE]",
+      });
+
       // Mark streaming as complete
       setMessages((prev) =>
         prev.map((m) =>
@@ -291,11 +339,16 @@ export function useChat({
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
       onError?.(err instanceof Error ? err : new Error(errorMessage));
+      onProtocolEvent?.({
+        type: "info",
+        title: "Error",
+        content: errorMessage,
+      });
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [messages, mode, conversationId, isLoading, onToolCall, onError, onSuccess]);
+  }, [messages, mode, conversationId, isLoading, onToolCall, onError, onSuccess, onProtocolEvent]);
 
   return {
     messages,

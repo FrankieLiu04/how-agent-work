@@ -29,7 +29,11 @@ export function clearUI(): void {
   if (ideEditor) ideEditor.textContent = "";
 
   const termScreen = document.querySelector<HTMLElement>(".client-screen.terminal");
-  if (termScreen) termScreen.innerHTML = "";
+  if (termScreen) {
+    const termBody = termScreen.querySelector<HTMLElement>(".terminal-body");
+    if (termBody) termBody.innerHTML = "";
+    else termScreen.innerHTML = "";
+  }
 
   const logContent = $("logContent");
   if (logContent) logContent.innerHTML = '<div class="log-empty">No traffic yet.</div>';
@@ -53,20 +57,47 @@ export function setClientTheme(theme: "phone" | "ide" | "terminal"): void {
         `;
   } else if (theme === "ide") {
     screen.innerHTML = `
-            <div class="ide-sidebar">
-                <div class="ide-icon"></div>
-                <div class="ide-icon"></div>
-                <div class="ide-icon" style="margin-top:auto; margin-bottom:10px;"></div>
+        <div class="ide-titlebar">
+          <span class="ide-dot red"></span>
+          <span class="ide-dot yellow"></span>
+          <span class="ide-dot green"></span>
+          <span class="ide-title">VS Code</span>
+        </div>
+        <div class="ide-shell">
+          <div class="ide-activitybar">
+            <div class="ide-icon active"></div>
+            <div class="ide-icon"></div>
+            <div class="ide-icon"></div>
+            <div class="ide-icon"></div>
+          </div>
+          <div class="ide-explorer">
+            <div class="ide-panel-title">Explorer</div>
+            <div class="ide-tree">
+              <div class="ide-tree-item">src/</div>
+              <div class="ide-tree-item indent">utils.js</div>
             </div>
-            <div class="ide-main">
-                <div class="ide-tabs">
-                    <div class="ide-tab">utils.js</div>
-                </div>
-                <div class="ide-editor" id="ideEditor"></div>
+          </div>
+          <div class="ide-main">
+            <div class="ide-tabs">
+              <div class="ide-tab active">utils.js</div>
             </div>
+            <div class="ide-editor" id="ideEditor"></div>
+          </div>
+          <div class="ide-copilot">
+            <div class="ide-copilot-header">Copilot Chat</div>
+            <div class="ide-copilot-body">Ask about the code or request edits.</div>
+          </div>
+        </div>
         `;
   } else if (theme === "terminal") {
     screen.classList.add("terminal");
+    screen.innerHTML = `
+        <div class="terminal-header">
+          <span class="terminal-title">claude-code</span>
+          <span class="terminal-status">idle</span>
+        </div>
+        <div class="terminal-body"></div>
+      `;
   }
 
   card.appendChild(screen);
@@ -196,6 +227,7 @@ export function acceptIdeGhost(): void {
 export function addTermLine(type: "user" | "agent" | "system" | "success", text: string): void {
   const screen = document.querySelector<HTMLElement>(".client-screen.terminal");
   if (!screen) return;
+  const container = screen.querySelector<HTMLElement>(".terminal-body") ?? screen;
 
   const line = document.createElement("div");
   line.className = "term-line";
@@ -219,8 +251,8 @@ export function addTermLine(type: "user" | "agent" | "system" | "success", text:
     line.style.color = type === "success" ? "#34c759" : "#ccc";
   }
 
-  screen.appendChild(line);
-  screen.scrollTop = screen.scrollHeight;
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight;
 }
 
 export function setContext(text: string): void {
