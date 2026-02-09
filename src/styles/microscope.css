@@ -1,7 +1,7 @@
 main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1.2fr 1fr 320px;
+  grid-template-columns: 1.35fr 1.1fr 1fr 300px;
   gap: 24px;
   padding: 24px 32px 32px 32px;
   max-width: 1600px;
