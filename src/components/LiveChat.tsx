@@ -328,8 +328,6 @@ export function LiveChat({
         .live-chat {
           display: flex;
           height: 100%;
-          flex: 1;
-          min-height: 0;
           gap: 12px;
         }
 

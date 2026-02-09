@@ -266,14 +266,11 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
 
         .live-main {
           flex: 1;
-          display: flex;
-          flex-direction: column;
           padding: 24px 32px;
           max-width: 1400px;
           margin: 0 auto;
           width: 100%;
           overflow: hidden;
-          grid-template-columns: none;
         }
       `}</style>
     </>
