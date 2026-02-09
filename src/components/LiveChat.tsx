@@ -259,69 +259,52 @@ export function LiveChat({
   if (mode === "ide") {
     return (
       <div className="live-chat ide-layout">
-        <div className="ide-workspace">
-          <div className="vscode-titlebar">
-            <span className="vscode-dot red"></span>
-            <span className="vscode-dot yellow"></span>
-            <span className="vscode-dot green"></span>
-            <span className="vscode-title">Workspace</span>
-          </div>
-          <div className="vscode-body">
-            <div className="vscode-activitybar">
-              <div className="activity-icon active"></div>
-              <div className="activity-icon"></div>
-              <div className="activity-icon"></div>
-              <div className="activity-icon"></div>
-            </div>
-            <div className="vscode-explorer">
-              <div className="explorer-header">Explorer</div>
-              <FileTree
-                files={files}
-                selectedPath={selectedPath}
-                onSelect={handleFileSelect}
-                onDelete={deleteFile}
-                disabled={isLoading}
+        <div className="ide-files">
+          <div className="ide-files-header">Files</div>
+          <FileTree
+            files={files}
+            selectedPath={selectedPath}
+            onSelect={handleFileSelect}
+            onDelete={deleteFile}
+            disabled={isLoading}
+          />
+          {limits && (
+            <div className="panel-limits">
+              <LimitIndicator
+                current={limits.currentFileCount}
+                max={limits.maxFiles}
+                label="Files"
               />
-              {limits && (
-                <div className="panel-limits">
-                  <LimitIndicator
-                    current={limits.currentFileCount}
-                    max={limits.maxFiles}
-                    label="Files"
-                  />
-                  <LimitIndicator
-                    current={limits.currentTotalSize}
-                    max={limits.maxTotalSize}
-                    label="Storage"
-                    unit="KB"
-                  />
-                </div>
-              )}
+              <LimitIndicator
+                current={limits.currentTotalSize}
+                max={limits.maxTotalSize}
+                label="Storage"
+                unit="KB"
+              />
             </div>
-            <div className="vscode-editor">
-              <div className="editor-tabs">
-                <div className="editor-tab active">
-                  {selectedPath ? selectedPath.split("/").pop() : "Untitled"}
-                </div>
-              </div>
-              <pre className="editor-content">
-                {selectedPath ? (selectedContent || "(empty)") : "Select a file to view its contents."}
-              </pre>
-            </div>
-          </div>
+          )}
         </div>
-        <div className="copilot-panel">
-          <div className="copilot-header">
-            <span>Copilot Chat</span>
-            <span className="copilot-status">Live</span>
+        <div className="ide-right">
+          <div className="ide-editor-panel">
+            <div className="editor-tabs">
+              <div className="editor-tab active">
+                {selectedPath ? selectedPath.split("/").pop() : "Untitled"}
+              </div>
+            </div>
+            <pre className="editor-content">
+              {selectedPath ? (selectedContent || "(empty)") : "Select a file to view its contents."}
+            </pre>
           </div>
-          {renderChatPane({ compactTools: true, className: "copilot-chat", emptyVariant: "copilot" })}
-          <div className="panel-footer">
-            <QuotaIndicator
-              used={quota.used}
-              max={quota.limit}
-              resetTime={quota.resetAt}
-            />
+          <div className="ide-chat-panel">
+            <div className="ide-chat-header">Extension Chat</div>
+            {renderChatPane({ compactTools: true, className: "ide-chat-body", emptyVariant: "copilot" })}
+            <div className="panel-footer">
+              <QuotaIndicator
+                used={quota.used}
+                max={quota.limit}
+                resetTime={quota.resetAt}
+              />
+            </div>
           </div>
         </div>
         <style jsx>{`
@@ -415,93 +398,42 @@ export function LiveChat({
             background: var(--bg);
           }
 
-          .ide-workspace {
+          .ide-files {
+            width: 220px;
+            display: flex;
+            flex-direction: column;
+            background: #1b1b1d;
+            border-radius: var(--radius);
+            border: 1px solid #2a2a2a;
+            overflow: hidden;
+          }
+
+          .ide-files-header {
+            padding: 10px 12px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #a0a0a0;
+            background: #242426;
+            border-bottom: 1px solid #2a2a2a;
+          }
+
+          .ide-right {
             flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 0;
+          }
+
+          .ide-editor-panel {
+            flex: 1.2;
             display: flex;
             flex-direction: column;
             background: #1e1e1e;
             border-radius: var(--radius);
             border: 1px solid #2a2a2a;
             overflow: hidden;
-            min-width: 0;
-          }
-
-          .vscode-titlebar {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
-            background: #2d2d2d;
-            border-bottom: 1px solid #2a2a2a;
-            font-size: 11px;
-            color: #b8b8b8;
-          }
-
-          .vscode-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-          }
-
-          .vscode-dot.red { background: #ff5f56; }
-          .vscode-dot.yellow { background: #ffbd2e; }
-          .vscode-dot.green { background: #27c93f; }
-
-          .vscode-title {
-            margin-left: 8px;
-          }
-
-          .vscode-body {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 44px 220px 1fr;
-            min-height: 0;
-          }
-
-          .vscode-activitybar {
-            background: #252526;
-            border-right: 1px solid #2a2a2a;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 10px 0;
-            gap: 12px;
-          }
-
-          .activity-icon {
-            width: 18px;
-            height: 18px;
-            border-radius: 4px;
-            background: #3c3c3c;
-          }
-
-          .activity-icon.active {
-            background: #007acc;
-          }
-
-          .vscode-explorer {
-            background: #1f1f1f;
-            border-right: 1px solid #2a2a2a;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-          }
-
-          .explorer-header {
-            padding: 8px 12px;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #a0a0a0;
-            border-bottom: 1px solid #2a2a2a;
-            background: #252526;
-          }
-
-          .vscode-editor {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            background: #1e1e1e;
           }
 
           .editor-tabs {
@@ -540,19 +472,18 @@ export function LiveChat({
             background: #1e1e1e;
           }
 
-          .copilot-panel {
-            width: 320px;
+          .ide-chat-panel {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
             background: var(--card-bg);
             border-radius: var(--radius);
             border: 1px solid var(--border);
             overflow: hidden;
+            min-height: 260px;
           }
 
-          .copilot-header {
+          .ide-chat-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -563,21 +494,15 @@ export function LiveChat({
             border-bottom: 1px solid var(--border);
           }
 
-          .copilot-status {
-            font-size: 10px;
-            color: var(--text-sec);
-          }
-
-          .copilot-chat {
+          .ide-chat-body {
             border: none;
             border-radius: 0;
             background: transparent;
           }
 
           .panel-limits {
-            background: #1b1b1b;
+            background: #1b1b1d;
             border-top: 1px solid #2a2a2a;
-            border-bottom: 1px solid #2a2a2a;
             padding: 4px 0;
           }
 
@@ -644,6 +569,7 @@ export function LiveChat({
                 ))}
               </div>
             )}
+            <CliInput onSend={handleSend} disabled={isLoading || quota.used >= quota.limit} />
             <div ref={messagesEndRef} />
           </div>
           {chatError && (
@@ -654,7 +580,6 @@ export function LiveChat({
               Trace: <a href={`/api/debug/traces?id=${traceId}`} target="_blank" rel="noreferrer">{traceId.slice(0, 8)}...</a>
             </div>
           )}
-          <CliInput onSend={handleSend} disabled={isLoading || quota.used >= quota.limit} />
         </div>
         <style jsx>{`
           .live-chat {
@@ -1035,7 +960,7 @@ function CliInput({
     setValue("");
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -1043,32 +968,26 @@ function CliInput({
   };
 
   return (
-    <div className="cli-input">
-      <span className="cli-input-prompt">&gt;</span>
-      <textarea
-        className="cli-input-textarea"
+    <div className="cli-input-line">
+      <span className="cli-input-prompt">$</span>
+      <input
+        className="cli-input-field"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? "Running..." : "Type a command..."}
+        placeholder={disabled ? "Running..." : "Type a command and press Enter"}
         disabled={disabled}
-        rows={1}
+        aria-label="CLI command input"
       />
-      <button
-        className={`cli-input-send ${!value.trim() || disabled ? "disabled" : ""}`}
-        onClick={handleSubmit}
-        disabled={!value.trim() || disabled}
-      >
-        Run
-      </button>
+      <span className={`cli-cursor ${disabled ? "dim" : ""}`}></span>
       <style jsx>{`
-        .cli-input {
+        .cli-input-line {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 10px 12px;
-          border-top: 1px solid #1f2328;
-          background: #0d1117;
+          margin-top: 8px;
+          padding-top: 8px;
+          border-top: 1px dashed rgba(126, 231, 135, 0.15);
         }
 
         .cli-input-prompt {
@@ -1076,34 +995,34 @@ function CliInput({
           font-weight: 700;
         }
 
-        .cli-input-textarea {
+        .cli-input-field {
           flex: 1;
           background: transparent;
           border: none;
-          resize: none;
           color: #e6edf3;
           font-family: var(--font-mono);
           font-size: 13px;
           outline: none;
         }
 
-        .cli-input-textarea::placeholder {
+        .cli-input-field::placeholder {
           color: #6b7280;
         }
 
-        .cli-input-send {
-          background: #1f6feb;
-          border: none;
-          color: #fff;
-          font-size: 11px;
-          padding: 4px 10px;
-          border-radius: 6px;
-          cursor: pointer;
+        .cli-cursor {
+          width: 8px;
+          height: 16px;
+          background: #7ee787;
+          animation: blink 1s step-end infinite;
         }
 
-        .cli-input-send.disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
+        .cli-cursor.dim {
+          opacity: 0.4;
+        }
+
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
         }
       `}</style>
     </div>
