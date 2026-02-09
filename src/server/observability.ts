@@ -9,7 +9,7 @@ export type Trace = {
   traceId: string;
   route: string;
   mode: string;
-  provider: "mock" | "openai";
+  provider: "mock" | "openai" | "deepseek";
   startMs: number;
   endMs: number | null;
   status: number | null;
@@ -37,7 +37,7 @@ function getStore(): Store {
   return g.__how_agent_work_obs__;
 }
 
-export function startTrace(args: { traceId: string; route: string; mode: string; provider: "mock" | "openai" }): Trace {
+export function startTrace(args: { traceId: string; route: string; mode: string; provider: "mock" | "openai" | "deepseek" }): Trace {
   return {
     traceId: args.traceId,
     route: args.route,

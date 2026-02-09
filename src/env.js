@@ -24,6 +24,7 @@ export const env = createEnv({
     DATABASE_URL: z.string().url(),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_BASE_URL: z.string().url().optional(),
+    TAVILY_API_KEY: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -51,6 +52,7 @@ export const env = createEnv({
     DATABASE_URL: process.env.DATABASE_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+    TAVILY_API_KEY: process.env.TAVILY_API_KEY,
     NODE_ENV: process.env.NODE_ENV,
   },
   /**
