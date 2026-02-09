@@ -16,12 +16,6 @@ type ProtocolLogEntry = {
   content: string;
 };
 
-type ProtocolPacket = {
-  time: string;
-  type: "req" | "res" | "info";
-  title: string;
-  content: string;
-};
 
 export function Microscope(props: { isAuthed: boolean; userName: string | null }) {
   const apiRef = useRef<EngineAPI | null>(null);
@@ -30,7 +24,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
   const [protocolLog, setProtocolLog] = useState<ProtocolLogEntry[]>([]);
   const [protocolContext, setProtocolContext] = useState<string>("(Empty)");
   const [protocolTokens, setProtocolTokens] = useState<string[]>([]);
-  const [lastPacket, setLastPacket] = useState<ProtocolPacket | null>(null);
   const [liveTraceId, setLiveTraceId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,7 +49,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
       setProtocolLog([]);
       setProtocolTokens([]);
       setProtocolContext("(Empty)");
-      setLastPacket(null);
       setLiveTraceId(null);
     }
   };
@@ -75,7 +67,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
     if (event.type === "clear") {
       setProtocolTokens([]);
       setProtocolContext("(Empty)");
-      setLastPacket(null);
       return;
     }
 
@@ -105,9 +96,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
 
     setProtocolLog((prev) => [...prev, entry].slice(-200));
 
-    if (event.type === "req" || event.type === "res") {
-      setLastPacket({ time, type: event.type, title: event.title, content });
-    }
   }, []);
 
   return (
@@ -321,37 +309,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
             </div>
           </div>
 
-          <div className="zone" id="zoneNetwork">
-            <div className="zone-header">
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-              </svg>
-              Network / Protocol
-            </div>
-            <div className="card">
-              <div className="network-stage live-network">
-                <div className="connection-line">
-                  <div className="arrow-head arrow-right"></div>
-                  <div className="arrow-head arrow-left"></div>
-                </div>
-                {lastPacket ? (
-                  <div className={`live-packet ${lastPacket.type}`}>
-                    <div className="packet-meta">
-                      <span className="packet-time">{lastPacket.time}</span>
-                      <span className={`packet-type ${lastPacket.type}`}>{lastPacket.type.toUpperCase()}</span>
-                    </div>
-                    <div className="packet-title">{lastPacket.title}</div>
-                    <pre className="packet-body">{lastPacket.content}</pre>
-                  </div>
-                ) : (
-                  <div className="live-packet empty">No traffic yet.</div>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="zone" id="zoneServer">
             <div className="zone-header">
               <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -449,72 +406,14 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
 
         .live-stage {
           align-items: stretch;
+          grid-template-columns: 1.6fr 1fr 300px;
         }
 
         .live-client-card {
           height: 100%;
           display: flex;
           flex-direction: column;
-        }
-
-        .live-network {
-          padding: 20px;
-          position: relative;
-        }
-
-        .live-packet {
-          position: relative;
-          z-index: 1;
-          max-width: 100%;
-          width: 100%;
-          background: var(--card-bg);
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          padding: 12px;
-          font-size: 11px;
-          font-family: var(--font-mono);
-          color: var(--text);
-          box-shadow: var(--shadow);
-        }
-
-        .live-packet.empty {
-          text-align: center;
-          color: var(--text-sec);
-        }
-
-        .packet-meta {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 6px;
-          font-size: 10px;
-          color: var(--text-sec);
-        }
-
-        .packet-type {
-          padding: 2px 6px;
-          border-radius: 999px;
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-        }
-
-        .packet-type.req { background: rgba(0, 122, 255, 0.12); color: var(--accent); }
-        .packet-type.res { background: rgba(52, 199, 89, 0.12); color: var(--success); }
-        .packet-type.info { background: rgba(255, 159, 10, 0.12); color: var(--orange); }
-
-        .packet-title {
-          font-weight: 600;
-          margin-bottom: 6px;
-        }
-
-        .packet-body {
-          margin: 0;
-          white-space: pre-wrap;
-          word-break: break-word;
-          max-height: 220px;
-          overflow-y: auto;
+          overflow: hidden;
         }
 
         .token-placeholder {

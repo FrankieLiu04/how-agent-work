@@ -10,7 +10,6 @@ import { QuotaIndicator, LimitIndicator } from "~/components/QuotaIndicator";
 import { ConversationList } from "~/components/ConversationList";
 import { FileTree } from "~/components/FileTree";
 import { ToolCallDisplay, type ToolCall } from "~/components/ToolCallDisplay";
-import { TerminalView } from "~/components/TerminalView";
 
 interface LiveChatProps {
   mode: ChatMode;
@@ -47,7 +46,6 @@ export function LiveChat({
   const {
     files,
     limits,
-    cwd,
     terminalLines,
     isLoading: sandboxLoading,
     readFile,
@@ -622,6 +620,30 @@ export function LiveChat({
                 </div>
               ))
             )}
+            {terminalLines.length > 0 && (
+              <div className="cli-terminal">
+                <div className="cli-terminal-title">Terminal Output</div>
+                {terminalLines.map((line) => (
+                  <div key={line.id} className={`cli-term-line ${line.type}`}>
+                    {line.type === "command" && (
+                      <>
+                        <span className="cli-prefix">$</span>
+                        <span className="cli-text">{line.content}</span>
+                      </>
+                    )}
+                    {line.type === "output" && (
+                      <pre className="cli-output">{line.content}</pre>
+                    )}
+                    {line.type === "error" && (
+                      <pre className="cli-error-text">{line.content}</pre>
+                    )}
+                    {line.type === "system" && (
+                      <span className="cli-system">{line.content}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
           {chatError && (
@@ -633,20 +655,6 @@ export function LiveChat({
             </div>
           )}
           <CliInput onSend={handleSend} disabled={isLoading || quota.used >= quota.limit} />
-        </div>
-        <div className="live-chat-panel">
-          <TerminalView
-            lines={terminalLines}
-            cwd={cwd}
-            isRunning={isLoading}
-          />
-          <div className="panel-footer">
-            <QuotaIndicator
-              used={quota.used}
-              max={quota.limit}
-              resetTime={quota.resetAt}
-            />
-          </div>
         </div>
         <style jsx>{`
           .live-chat {
@@ -745,6 +753,45 @@ export function LiveChat({
             margin-top: 6px;
           }
 
+          .cli-terminal {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #1f2328;
+          }
+
+          .cli-terminal-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #6b7280;
+            margin-bottom: 8px;
+          }
+
+          .cli-term-line {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 6px;
+          }
+
+          .cli-output {
+            margin: 0;
+            color: #c9d1d9;
+            white-space: pre-wrap;
+            word-break: break-word;
+          }
+
+          .cli-error-text {
+            margin: 0;
+            color: #f85149;
+            white-space: pre-wrap;
+            word-break: break-word;
+          }
+
+          .cli-system {
+            color: #f2cc60;
+          }
+
           .cli-error {
             padding: 6px 12px;
             background: rgba(248, 81, 73, 0.15);
@@ -764,17 +811,6 @@ export function LiveChat({
             color: #58a6ff;
           }
 
-          .live-chat-panel {
-            width: 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
-          }
-
-          .panel-footer {
-            margin-top: auto;
-          }
         `}</style>
       </div>
     );
