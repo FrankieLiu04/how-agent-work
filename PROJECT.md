@@ -188,8 +188,8 @@ prisma/
 
 ## 环境变量要点
 见 `src/env.js` 与 `.env.example`：
-- 必需：`DATABASE_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`
-- 可选：`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TAVILY_API_KEY`
+- 必需：`DATABASE_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` （Vercel部署环境已有）
+- 可选：`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TAVILY_API_KEY` （Vercel部署环境已有）
 
 ---
 
