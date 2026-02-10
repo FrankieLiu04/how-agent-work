@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = 5;
+  const limit = 60;
   const hourStart = getHourStart(new Date());
   const resetAt = new Date(hourStart.getTime() + 60 * 60 * 1000);
 

@@ -173,7 +173,7 @@ export async function POST(request: Request): Promise<Response> {
   if (useReal && userId) {
     const quotaSpan = startSpan(trace, "quota.consume");
     try {
-      quota = await consumeHourlyQuota({ userId, limit: 5 });
+      quota = await consumeHourlyQuota({ userId, limit: 60 });
     } catch {
       quota = null;
     } finally {

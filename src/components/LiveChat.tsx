@@ -21,6 +21,7 @@ export function LiveChat({
   isAuthed,
   onProtocolEvent,
 }: LiveChatProps) {
+  const STORAGE_KEY = "livechat:lastConversationByMode";
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
@@ -133,11 +134,26 @@ export function LiveChat({
   });
 
   useEffect(() => {
+    if (!isAuthed || typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as Partial<Record<ChatMode, string | null>>;
+      setLastConversationByMode((prev) => ({ ...prev, ...parsed }));
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [isAuthed]);
+
+  useEffect(() => {
     if (!currentConversation?.id) return;
-    setLastConversationByMode((prev) => ({
-      ...prev,
-      [mode]: currentConversation.id,
-    }));
+    setLastConversationByMode((prev) => {
+      const next = { ...prev, [mode]: currentConversation.id };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      }
+      return next;
+    });
   }, [currentConversation?.id, mode]);
 
   useEffect(() => {

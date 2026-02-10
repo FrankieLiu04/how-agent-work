@@ -23,8 +23,8 @@ interface UseQuotaReturn {
 
 const DEFAULT_QUOTA: QuotaStatus = {
   used: 0,
-  limit: 5,
-  remaining: 5,
+  limit: 60,
+  remaining: 60,
   resetAt: null,
 };
 
