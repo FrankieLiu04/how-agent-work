@@ -23,7 +23,7 @@ interface ChatLayoutProps {
   error?: string | null;
   traceId?: string | null;
   onDismissError: () => void;
-  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesEndRef: RefObject<HTMLDivElement | null>;
 }
 
 export function ChatLayout({

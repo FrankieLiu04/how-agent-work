@@ -15,7 +15,7 @@ interface ChatPaneProps {
   onDismissError: () => void;
   quotaUsed: number;
   quotaLimit: number;
-  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesEndRef: RefObject<HTMLDivElement | null>;
   compactTools?: boolean;
   className?: string;
   emptyVariant?: "default" | "copilot";

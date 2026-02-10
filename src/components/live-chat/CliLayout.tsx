@@ -24,7 +24,7 @@ interface CliLayoutProps {
   isInputDisabled: boolean;
   error?: string | null;
   traceId?: string | null;
-  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesEndRef: RefObject<HTMLDivElement | null>;
 }
 
 export function CliLayout({
