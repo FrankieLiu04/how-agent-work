@@ -289,7 +289,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
         </>
       ) : (
         // Live mode - real LLM interaction
-        <main id="mainStage" className="live-stage">
+        <main id="mainStage" className="live-stage live-stage--wide-client">
           <div className="zone" id="zoneClient">
             <div className="zone-header">
               <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -304,7 +304,6 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
                   mode={currentMode}
                   isAuthed={props.isAuthed}
                   onProtocolEvent={handleProtocolEvent}
-                  variant="embedded"
                 />
               </div>
             </div>
