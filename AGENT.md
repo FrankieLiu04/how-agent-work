@@ -25,6 +25,17 @@ This document highlights project-specific settings and memory points for the nex
 - Verify Vercel deployment includes latest Git commit via `vercel list -F json` and check `githubCommitSha`.
 - If auto-deploy does not trigger, manual deploy is acceptable and already used.
 
+## Common pitfalls and gotchas
+
+- Prisma `generate` is not a migration. Build logs showing `prisma generate` do not imply tables exist.
+- If runtime throws `P2021` for `Conversation`, check if migrations are outdated. A migration record can exist while the table is missing if the migration SQL did not include newer models.
+- When `DATABASE_URL` is correct but tables are missing, create and deploy a new migration (e.g., add `Conversation`, `ConversationMessage`, `VirtualFile`).
+- Vercel build runs `prisma migrate deploy && next build`; if models change but no new migration is generated, production will still miss tables.
+- Conversation lists are mode-scoped. Switching modes reloads a different list; use the last-selected conversation per mode for continuity.
+- `LiveChat` now persists last selected conversation per mode in `localStorage` to restore after refresh/login.
+- New conversation creation failures can be silent without UI feedback. Ensure errors from `useConversations` are surfaced to the user.
+- Quota limit was raised to 60/hour in `/api/quota` and `/api/chat/stream`.
+
 ## Migration caveats
 
 - If Prisma reports drift on production DB, the fastest path used was a full reset (`prisma migrate reset`).
