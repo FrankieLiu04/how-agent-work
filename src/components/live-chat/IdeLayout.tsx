@@ -2,9 +2,10 @@
 
 import { type RefObject } from "react";
 import { ConversationList, type Conversation } from "~/components/ConversationList";
-import { FileTree, type FileNode } from "~/components/FileTree";
+import { FileTree } from "~/components/FileTree";
 import { QuotaIndicator, LimitIndicator } from "~/components/QuotaIndicator";
 import { type ChatMessage, type ChatMode } from "~/hooks/useChat";
+import { type SandboxFile } from "~/hooks/useSandbox";
 import { ChatPane } from "~/components/live-chat/ChatPane";
 
 interface SandboxLimits {
@@ -32,7 +33,7 @@ interface IdeLayoutProps {
   traceId?: string | null;
   onDismissError: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
-  files: FileNode[];
+  files: SandboxFile[];
   limits: SandboxLimits | null;
   selectedPath: string | null;
   selectedContent: string;
