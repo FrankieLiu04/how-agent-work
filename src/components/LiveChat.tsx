@@ -33,6 +33,7 @@ export function LiveChat({
     ide: null,
     cli: null,
   });
+  const [conversationError, setConversationError] = useState<string | null>(null);
 
   const { quota, refresh: refreshQuota } = useQuota({ autoLoad: isAuthed });
 
@@ -43,6 +44,7 @@ export function LiveChat({
     createConversation,
     selectConversation,
     deleteConversation,
+    error: conversationsError,
   } = useConversations({
     mode:
       mode === "chat"
@@ -146,6 +148,11 @@ export function LiveChat({
   }, [isAuthed]);
 
   useEffect(() => {
+    if (!conversationsError) return;
+    setConversationError(conversationsError);
+  }, [conversationsError]);
+
+  useEffect(() => {
     if (!currentConversation?.id) return;
     setLastConversationByMode((prev) => {
       const next = { ...prev, [mode]: currentConversation.id };
@@ -185,6 +192,12 @@ export function LiveChat({
         effectiveConversationId = created?.id ?? null;
         if (created?.id) {
           await selectConversation(created.id);
+          setConversationError(null);
+        } else {
+          setConversationError(
+            conversationsError ?? "Failed to create conversation. Please try again."
+          );
+          return;
         }
       }
 
@@ -203,6 +216,7 @@ export function LiveChat({
       selectConversation,
       initSandbox,
       sendMessage,
+      conversationsError,
     ]
   );
 
@@ -236,7 +250,11 @@ export function LiveChat({
 
   const isInputDisabled = chatLoading;
   const isLoading = chatLoading || convLoading || sandboxLoading;
-  const onDismissError = () => clearMessages();
+  const onDismissError = () => {
+    clearMessages();
+    setConversationError(null);
+  };
+  const displayError = conversationError ?? chatError;
 
   if (mode === "ide") {
     return (
@@ -254,7 +272,7 @@ export function LiveChat({
         quotaResetAt={quota.resetAt}
         onSend={handleSend}
         isInputDisabled={isInputDisabled}
-        error={chatError}
+        error={displayError}
         traceId={traceId}
         onDismissError={onDismissError}
         messagesEndRef={messagesEndRef}
@@ -284,7 +302,7 @@ export function LiveChat({
         quotaResetAt={quota.resetAt}
         onSend={handleSend}
         isInputDisabled={isInputDisabled}
-        error={chatError}
+        error={displayError}
         traceId={traceId}
         messagesEndRef={messagesEndRef}
       />
@@ -306,7 +324,7 @@ export function LiveChat({
       quotaResetAt={quota.resetAt}
       onSend={handleSend}
       isInputDisabled={isInputDisabled}
-      error={chatError}
+      error={displayError}
       traceId={traceId}
       onDismissError={onDismissError}
       messagesEndRef={messagesEndRef}
