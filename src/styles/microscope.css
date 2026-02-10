@@ -55,6 +55,14 @@ main {
   box-shadow: var(--shadow), 0 0 0 3px var(--accent-glow);
 }
 
+/* Live mode client card — must be global to avoid styled-jsx scoping issues */
+.live-client-card {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
 .network-stage.highlight {
   filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.1));
 }

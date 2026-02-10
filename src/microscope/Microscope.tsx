@@ -409,13 +409,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           grid-template-columns: 1.8fr 0.8fr 280px;
         }
 
-        .live-client-card {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          min-height: 0;
-        }
+        /* .live-client-card is now in global microscope.css */
 
         .live-context {
           max-height: 200px;

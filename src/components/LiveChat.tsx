@@ -369,9 +369,11 @@ export function LiveChat({
         </div>
         <style jsx>{`
           .live-chat {
+            position: absolute;
+            inset: 0;
             display: flex;
-            height: 100%;
             gap: 12px;
+            overflow: hidden;
           }
 
           .live-chat-sidebar {
@@ -380,10 +382,12 @@ export function LiveChat({
             flex-direction: column;
             gap: 8px;
             flex-shrink: 0;
+            overflow: hidden;
           }
 
           .sidebar-footer {
             margin-top: auto;
+            flex-shrink: 0;
           }
 
           .live-chat-main {
@@ -397,6 +401,14 @@ export function LiveChat({
             overflow: hidden;
           }
 
+          .chat-shell {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+          }
+
           .messages-container {
             flex: 1;
             overflow-y: auto;
@@ -404,6 +416,7 @@ export function LiveChat({
             display: flex;
             flex-direction: column;
             gap: 12px;
+            min-height: 0;
           }
 
           .messages-empty {
@@ -478,6 +491,7 @@ export function LiveChat({
             border-radius: var(--radius);
             border: 1px solid #2a2a2a;
             overflow: hidden;
+            min-height: 0;
           }
 
           .ide-files-header {
@@ -496,6 +510,8 @@ export function LiveChat({
             flex-direction: column;
             gap: 12px;
             min-width: 0;
+            min-height: 0;
+            overflow: hidden;
           }
 
           .ide-editor-panel {
@@ -668,9 +684,11 @@ export function LiveChat({
         </div>
         <style jsx>{`
           .live-chat {
+            position: absolute;
+            inset: 0;
             display: flex;
-            height: 100%;
             gap: 12px;
+            overflow: hidden;
           }
 
           .live-chat-sidebar {
@@ -679,10 +697,12 @@ export function LiveChat({
             flex-direction: column;
             gap: 8px;
             flex-shrink: 0;
+            overflow: hidden;
           }
 
           .sidebar-footer {
             margin-top: auto;
+            flex-shrink: 0;
           }
 
           .cli-layout {
@@ -735,6 +755,7 @@ export function LiveChat({
             flex: 1;
             padding: 12px 14px;
             overflow-y: auto;
+            min-height: 0;
             font-size: 13px;
             line-height: 1.6;
             color: #e6edf3;
@@ -864,10 +885,11 @@ export function LiveChat({
 
       <style jsx>{`
         .live-chat {
+          position: absolute;
+          inset: 0;
           display: flex;
-          height: 100%;
           gap: 12px;
-          min-height: 0;
+          overflow: hidden;
         }
 
         .live-chat-sidebar {
@@ -876,11 +898,12 @@ export function LiveChat({
           flex-direction: column;
           gap: 8px;
           flex-shrink: 0;
-          min-height: 0;
+          overflow: hidden;
         }
 
         .sidebar-footer {
           margin-top: auto;
+          flex-shrink: 0;
         }
 
         .live-chat-main {
@@ -888,7 +911,6 @@ export function LiveChat({
           display: flex;
           flex-direction: column;
           min-width: 0;
-          min-height: 0;
           background: var(--card-bg);
           border-radius: var(--radius);
           border: 1px solid var(--border);
@@ -900,6 +922,7 @@ export function LiveChat({
           display: flex;
           flex-direction: column;
           min-height: 0;
+          overflow: hidden;
         }
 
         .messages-container {
@@ -920,6 +943,7 @@ export function LiveChat({
           flex-direction: column;
           gap: 6px;
           font-size: 12px;
+          flex-shrink: 0;
         }
 
         .messages-empty {
