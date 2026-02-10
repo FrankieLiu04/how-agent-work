@@ -414,6 +414,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          min-height: 0;
         }
 
         .token-placeholder {

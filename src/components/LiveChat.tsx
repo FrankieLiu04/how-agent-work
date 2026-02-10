@@ -25,6 +25,14 @@ export function LiveChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
+  const [lastConversationByMode, setLastConversationByMode] = useState<
+    Record<ChatMode, string | null>
+  >({
+    chat: null,
+    agent: null,
+    ide: null,
+    cli: null,
+  });
 
   const {
     quota,
@@ -124,6 +132,29 @@ export function LiveChat({
     onSuccess: refreshQuota,
     onProtocolEvent,
   });
+
+  useEffect(() => {
+    if (!currentConversation?.id) return;
+    setLastConversationByMode((prev) => ({
+      ...prev,
+      [mode]: currentConversation.id,
+    }));
+  }, [currentConversation?.id, mode]);
+
+  useEffect(() => {
+    if (currentConversation || conversations.length === 0) return;
+    const remembered = lastConversationByMode[mode];
+    const match = remembered
+      ? conversations.find((c) => c.id === remembered)
+      : null;
+    if (match) {
+      void selectConversation(match.id);
+      return;
+    }
+    if (conversations[0]) {
+      void selectConversation(conversations[0].id);
+    }
+  }, [mode, conversations, currentConversation, lastConversationByMode, selectConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -236,7 +267,7 @@ export function LiveChat({
 
   const renderChatPane = (options?: { compactTools?: boolean; className?: string; emptyVariant?: "default" | "copilot" }) => (
     <div className={`live-chat-main ${options?.className ?? ""}`}>
-      <div className="messages-container">
+      <div className="messages-container" role="log" aria-live="polite">
         {messages.length === 0 ? (
           renderEmptyState(options?.emptyVariant ?? "default")
         ) : (
@@ -829,6 +860,7 @@ export function LiveChat({
           display: flex;
           height: 100%;
           gap: 12px;
+          min-height: 0;
         }
 
         .live-chat-sidebar {
@@ -837,6 +869,7 @@ export function LiveChat({
           flex-direction: column;
           gap: 8px;
           flex-shrink: 0;
+          min-height: 0;
         }
 
         .sidebar-footer {
@@ -848,6 +881,7 @@ export function LiveChat({
           display: flex;
           flex-direction: column;
           min-width: 0;
+          min-height: 0;
           background: var(--card-bg);
           border-radius: var(--radius);
           border: 1px solid var(--border);
@@ -861,6 +895,7 @@ export function LiveChat({
           display: flex;
           flex-direction: column;
           gap: 12px;
+          min-height: 0;
         }
 
         .messages-empty {
