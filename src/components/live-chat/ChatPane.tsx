@@ -67,7 +67,7 @@ export function ChatPane({
         <div className="live-chat__messages" role="log" aria-live="polite">
           {messages.length === 0
             ? renderEmptyState()
-            : messages.map((msg) => (
+            : (mode === "agent" ? messages.filter((msg) => msg.role !== "tool") : messages).map((msg) => (
                 <MessageBubble
                   key={msg.id}
                   message={msg}

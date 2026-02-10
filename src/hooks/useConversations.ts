@@ -78,7 +78,6 @@ export function useConversations({
       const newConversation = (await response.json()) as Conversation;
       setConversations((prev) => [newConversation, ...prev]);
       setCurrentConversation(newConversation);
-      await loadConversations();
       return newConversation;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create conversation");

@@ -120,6 +120,8 @@ export async function POST(request: Request): Promise<Response> {
       mode: conversation.mode,
       title: conversation.title,
       createdAt: conversation.createdAt.toISOString(),
+      updatedAt: conversation.updatedAt.toISOString(),
+      messageCount: 0,
     }),
     {
       status: 201,

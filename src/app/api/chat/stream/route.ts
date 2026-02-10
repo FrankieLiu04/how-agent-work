@@ -162,7 +162,10 @@ async function executeToolCall(
   switch (name) {
     case "tavily_search": {
       const query = typeof args.query === "string" ? args.query : "";
-      const response = await executeTavilySearch(query || "latest tech news");
+      if (!query.trim()) {
+        return "Search skipped: missing query.";
+      }
+      const response = await executeTavilySearch(query.trim());
       return formatTavilyResults(response);
     }
     default:
@@ -474,17 +477,37 @@ export async function POST(request: Request): Promise<Response> {
                 workingDoneSent = false;
               }
 
+              currentMessages = [
+                ...currentMessages,
+                {
+                  role: "assistant",
+                  tool_calls: limitedToolCalls.map((toolCall) => ({
+                    id: toolCall.id,
+                    type: "function",
+                    function: {
+                      name: toolCall.name,
+                      arguments: toolCall.argumentsText,
+                    },
+                  })),
+                },
+              ];
+
               for (const call of limitedToolCalls) {
                 const args = parseToolArguments(call.argumentsText);
+                const fallbackQuery = lastUserContent(currentMessages);
+                const resolvedArgs =
+                  call.name === "tavily_search" && (!args.query || typeof args.query !== "string")
+                    ? { ...args, query: fallbackQuery }
+                    : args;
                 writeData(
                   JSON.stringify({
                     type: "working_summary",
-                    text: buildWorkingSummary(call.name, args),
+                    text: buildWorkingSummary(call.name, resolvedArgs),
                   })
                 );
                 let resultText = "";
                 try {
-                  resultText = await executeToolCall(call.name, args);
+                  resultText = await executeToolCall(call.name, resolvedArgs);
                 } catch (error) {
                   resultText = `Tool execution failed: ${
                     error instanceof Error ? error.message : String(error)
@@ -516,6 +539,15 @@ export async function POST(request: Request): Promise<Response> {
                   },
                 ];
               }
+
+              currentMessages = [
+                ...currentMessages,
+                {
+                  role: "system",
+                  content:
+                    "请基于工具结果进行总结，不要直接原样粘贴结果。请结构化输出结论并标注来源链接。",
+                },
+              ];
             }
 
             writeData("[DONE]");
