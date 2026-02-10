@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ToolCall } from "~/components/ToolCallDisplay";
 
 export type MessageRole = "user" | "assistant" | "tool";
@@ -38,7 +38,7 @@ interface UseChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, options?: { conversationId?: string | null }) => Promise<void>;
   stopGeneration: () => void;
   clearMessages: () => void;
   traceId: string | null;
@@ -102,8 +102,77 @@ export function useChat({
     setError(null);
   }, []);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const loadMessages = useCallback(async () => {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/messages`);
+      if (!response.ok) {
+        throw new Error(`Failed to load messages: ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        messages: Array<{
+          id: string;
+          role: MessageRole;
+          content?: string | null;
+          toolCalls?: ToolCall[] | null;
+          createdAt: string;
+        }>;
+      };
+
+      setMessages(
+        data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content ?? "",
+          toolCalls: m.toolCalls ?? undefined,
+          timestamp: new Date(m.createdAt),
+          isStreaming: false,
+        }))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load messages");
+    }
+  }, [conversationId]);
+
+  const saveMessage = useCallback(
+    async (args: {
+      role: MessageRole;
+      content?: string;
+      toolCalls?: ToolCall[];
+      toolCallId?: string;
+      conversationIdOverride?: string | null;
+    }) => {
+      const targetId = args.conversationIdOverride ?? conversationId;
+      if (!targetId) return;
+
+      await fetch(`/api/conversations/${targetId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: args.role,
+          content: args.content,
+          toolCalls: args.toolCalls,
+          toolCallId: args.toolCallId,
+        }),
+      });
+    },
+    [conversationId]
+  );
+
+  useEffect(() => {
+    stopGeneration();
+    void loadMessages();
+  }, [conversationId, mode, loadMessages, stopGeneration]);
+
+  const sendMessage = useCallback(async (content: string, options?: { conversationId?: string | null }) => {
     if (!content.trim() || isLoading) return;
+
+    const conversationIdOverride = options?.conversationId ?? null;
+    const effectiveConversationId = conversationIdOverride ?? conversationId;
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -113,6 +182,11 @@ export function useChat({
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
+    void saveMessage({
+      role: "user",
+      content: userMessage.content,
+      conversationIdOverride: effectiveConversationId,
+    });
     setError(null);
     setIsLoading(true);
 
@@ -135,7 +209,7 @@ export function useChat({
       model: "deepseek-chat",
       stream: true,
       x_mode: mode,
-      conversation_id: conversationId,
+      x_conversation_id: effectiveConversationId,
       messages: apiMessages,
     };
 
@@ -328,6 +402,13 @@ export function useChat({
         )
       );
 
+      void saveMessage({
+        role: "assistant",
+        content: fullContent,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        conversationIdOverride: effectiveConversationId,
+      });
+
       // Notify success (e.g., to refresh quota)
       onSuccess?.();
 
@@ -348,7 +429,7 @@ export function useChat({
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [messages, mode, conversationId, isLoading, onToolCall, onError, onSuccess, onProtocolEvent]);
+  }, [messages, mode, conversationId, isLoading, onToolCall, onError, onSuccess, onProtocolEvent, saveMessage]);
 
   return {
     messages,

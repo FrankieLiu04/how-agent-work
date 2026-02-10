@@ -5,7 +5,7 @@ import { useState } from "react";
 export interface Conversation {
   id: string;
   title: string;
-  mode: "CHAT" | "AGENT";
+  mode: "CHAT" | "AGENT" | "IDE" | "CLI";
   createdAt: string;
   updatedAt: string;
   messageCount?: number;

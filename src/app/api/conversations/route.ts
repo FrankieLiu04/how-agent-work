@@ -6,7 +6,7 @@ import type { ConversationMode } from "@prisma/client";
 const MAX_CONVERSATIONS_PER_USER = 10;
 const MAX_MESSAGES_PER_CONVERSATION = 40; // 20 rounds = 40 messages (user + assistant)
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -15,8 +15,19 @@ export async function GET(): Promise<Response> {
     });
   }
 
+  const url = new URL(request.url);
+  const modeParam = url.searchParams.get("mode");
+  const mode = (modeParam?.toUpperCase() ?? "") as ConversationMode;
+
+  const where = {
+    userId: session.user.id,
+    ...(mode && ["CHAT", "AGENT", "IDE", "CLI"].includes(mode)
+      ? { mode }
+      : {}),
+  };
+
   const conversations = await db.conversation.findMany({
-    where: { userId: session.user.id },
+    where,
     orderBy: { updatedAt: "desc" },
     include: {
       _count: {
@@ -85,9 +96,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const mode = (body.mode?.toUpperCase() ?? "CHAT") as ConversationMode;
-  if (!["CHAT", "AGENT"].includes(mode)) {
+  if (!["CHAT", "AGENT", "IDE", "CLI"].includes(mode)) {
     return new Response(
-      JSON.stringify({ error: "Invalid mode. Must be CHAT or AGENT" }),
+      JSON.stringify({ error: "Invalid mode. Must be CHAT, AGENT, IDE, or CLI" }),
       {
         status: 400,
         headers: { "Content-Type": "application/json" },

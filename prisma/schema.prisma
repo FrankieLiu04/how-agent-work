@@ -110,6 +110,8 @@ enum UsageKind {
 enum ConversationMode {
     CHAT
     AGENT
+    IDE
+    CLI
 }
 
 model Conversation {

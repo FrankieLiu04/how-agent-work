@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { Conversation } from "~/components/ConversationList";
 
-type ConversationMode = "CHAT" | "AGENT";
+type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI";
 
 interface UseConversationsOptions {
   mode: ConversationMode;
@@ -42,12 +42,15 @@ export function useConversations({
       }
       const data = (await response.json()) as { conversations: Conversation[] };
       setConversations(data.conversations);
+      if (currentConversation && !data.conversations.some((c) => c.id === currentConversation.id)) {
+        setCurrentConversation(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load conversations");
     } finally {
       setIsLoading(false);
     }
-  }, [mode]);
+  }, [mode, currentConversation]);
 
   const createConversation = useCallback(async (): Promise<Conversation | null> => {
     setIsLoading(true);
@@ -148,6 +151,11 @@ export function useConversations({
       void loadConversations();
     }
   }, [autoLoad, loadConversations]);
+
+  useEffect(() => {
+    setConversations([]);
+    setCurrentConversation(null);
+  }, [mode]);
 
   return {
     conversations,

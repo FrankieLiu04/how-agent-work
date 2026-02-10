@@ -39,8 +39,15 @@ export function LiveChat({
     selectConversation,
     deleteConversation,
   } = useConversations({
-    mode: mode === "chat" ? "CHAT" : "AGENT",
-    autoLoad: isAuthed && (mode === "chat" || mode === "agent"),
+    mode:
+      mode === "chat"
+        ? "CHAT"
+        : mode === "agent"
+          ? "AGENT"
+          : mode === "ide"
+            ? "IDE"
+            : "CLI",
+    autoLoad: isAuthed,
   });
 
   const {
@@ -127,16 +134,21 @@ export function LiveChat({
       return;
     }
 
-    if ((mode === "chat" || mode === "agent") && !currentConversation) {
-      await createConversation();
+    let effectiveConversationId = currentConversation?.id ?? null;
+    if (!effectiveConversationId) {
+      const created = await createConversation();
+      effectiveConversationId = created?.id ?? null;
+      if (created?.id) {
+        await selectConversation(created.id);
+      }
     }
 
     if ((mode === "ide" || mode === "cli") && files.length === 0) {
       await initSandbox();
     }
 
-    await sendMessage(content);
-  }, [isAuthed, mode, currentConversation, files.length, createConversation, initSandbox, sendMessage]);
+    await sendMessage(content, { conversationId: effectiveConversationId });
+  }, [isAuthed, mode, currentConversation, files.length, createConversation, selectConversation, initSandbox, sendMessage]);
 
   const handleFileSelect = useCallback(async (path: string) => {
     if (!path) return;
@@ -259,6 +271,23 @@ export function LiveChat({
   if (mode === "ide") {
     return (
       <div className="live-chat ide-layout">
+        <div className="live-chat-sidebar">
+          <ConversationList
+            conversations={conversations}
+            currentId={currentConversation?.id ?? null}
+            onSelect={selectConversation}
+            onDelete={deleteConversation}
+            onNew={createConversation}
+            disabled={isLoading}
+          />
+          <div className="sidebar-footer">
+            <QuotaIndicator
+              used={quota.used}
+              max={quota.limit}
+              resetTime={quota.resetAt}
+            />
+          </div>
+        </div>
         <div className="ide-files">
           <div className="ide-files-header">Files</div>
           <FileTree
@@ -298,13 +327,6 @@ export function LiveChat({
           <div className="ide-chat-panel">
             <div className="ide-chat-header">Extension Chat</div>
             {renderChatPane({ compactTools: true, className: "ide-chat-body", emptyVariant: "copilot" })}
-            <div className="panel-footer">
-              <QuotaIndicator
-                used={quota.used}
-                max={quota.limit}
-                resetTime={quota.resetAt}
-              />
-            </div>
           </div>
         </div>
         <style jsx>{`
@@ -312,6 +334,18 @@ export function LiveChat({
             display: flex;
             height: 100%;
             gap: 12px;
+          }
+
+          .live-chat-sidebar {
+            width: 240px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+          }
+
+          .sidebar-footer {
+            margin-top: auto;
           }
 
           .live-chat-main {
@@ -506,10 +540,6 @@ export function LiveChat({
             padding: 4px 0;
           }
 
-          .panel-footer {
-            margin-top: auto;
-            padding: 0 10px 10px;
-          }
         `}</style>
       </div>
     );
@@ -518,6 +548,23 @@ export function LiveChat({
   if (mode === "cli") {
     return (
       <div className="live-chat cli-layout">
+        <div className="live-chat-sidebar">
+          <ConversationList
+            conversations={conversations}
+            currentId={currentConversation?.id ?? null}
+            onSelect={selectConversation}
+            onDelete={deleteConversation}
+            onNew={createConversation}
+            disabled={isLoading}
+          />
+          <div className="sidebar-footer">
+            <QuotaIndicator
+              used={quota.used}
+              max={quota.limit}
+              resetTime={quota.resetAt}
+            />
+          </div>
+        </div>
         <div className="cli-console">
           <div className="cli-header">
             <span className="cli-title">claude-code</span>
@@ -586,6 +633,18 @@ export function LiveChat({
             display: flex;
             height: 100%;
             gap: 12px;
+          }
+
+          .live-chat-sidebar {
+            width: 240px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+          }
+
+          .sidebar-footer {
+            margin-top: auto;
           }
 
           .cli-layout {
