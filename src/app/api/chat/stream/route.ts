@@ -35,6 +35,19 @@ type ChatCompletionRequest = {
   tools?: unknown;
 };
 
+type StreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      tool_calls?: Array<{
+        id: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string | null;
+  }>;
+};
+
 const MAX_INPUT_LENGTH = 500;
 const MAX_OUTPUT_TOKENS = 800;
 const MAX_AGENT_TOOL_ROUNDS = 5;
@@ -387,21 +400,10 @@ export async function POST(request: Request): Promise<Response> {
                   if (!data) continue;
                   if (data === "[DONE]") continue;
 
-                  let parsed: {
-                    choices?: Array<{
-                      delta?: {
-                        content?: string;
-                        tool_calls?: Array<{
-                          id: string;
-                          function?: { name?: string; arguments?: string };
-                        }>;
-                      };
-                      finish_reason?: string | null;
-                    }>;
-                  } | null = null;
+                  let parsed: StreamChunk | null = null;
 
                   try {
-                    parsed = JSON.parse(data) as typeof parsed;
+                    parsed = JSON.parse(data) as StreamChunk;
                   } catch {
                     parsed = null;
                   }
