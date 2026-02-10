@@ -396,44 +396,46 @@ export function LiveChat({
     </div>
   );
 
-  const renderChatPane = (options?: { compactTools?: boolean; className?: string; emptyVariant?: "default" | "copilot" }) => (
-    <div className={`live-chat-main ${options?.className ?? ""}`}>
-      <div className="chat-shell">
-        <div className="messages-container" role="log" aria-live="polite">
-          {messages.length === 0 ? (
-            renderEmptyState(options?.emptyVariant ?? "default")
-          ) : (
-            messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} compactTools={options?.compactTools} />
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {(chatError || traceId) && (
-          <div className="chat-status">
-            {chatError && (
-              <div className="chat-error">
-                <span>⚠️ {chatError}</span>
-                <button onClick={() => clearMessages()}>Dismiss</button>
-              </div>
+  function renderChatPane(options?: { compactTools?: boolean; className?: string; emptyVariant?: "default" | "copilot" }) {
+    return (
+      <div className={`live-chat-main ${options?.className ?? ""}`}>
+        <div className="chat-shell">
+          <div className="messages-container" role="log" aria-live="polite">
+            {messages.length === 0 ? (
+              renderEmptyState(options?.emptyVariant ?? "default")
+            ) : (
+              messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} compactTools={options?.compactTools} />
+              ))
             )}
-            {traceId && (
-              <div className="trace-id">
-                Trace: <a href={`/api/debug/traces?id=${traceId}`} target="_blank" rel="noreferrer">{traceId.slice(0, 8)}...</a>
-              </div>
-            )}
+            <div ref={messagesEndRef} />
           </div>
-        )}
 
-        <ChatInput
-          onSend={handleSend}
-          disabled={isInputDisabled || quota.used >= quota.limit}
-          mode={mode}
-        />
+          {(chatError || traceId) && (
+            <div className="chat-status">
+              {chatError && (
+                <div className="chat-error">
+                  <span>⚠️ {chatError}</span>
+                  <button onClick={() => clearMessages()}>Dismiss</button>
+                </div>
+              )}
+              {traceId && (
+                <div className="trace-id">
+                  Trace: <a href={`/api/debug/traces?id=${traceId}`} target="_blank" rel="noreferrer">{traceId.slice(0, 8)}...</a>
+                </div>
+              )}
+            </div>
+          )}
+
+          <ChatInput
+            onSend={handleSend}
+            disabled={isInputDisabled || quota.used >= quota.limit}
+            mode={mode}
+          />
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if (mode === "ide") {
     return (
