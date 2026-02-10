@@ -94,7 +94,7 @@ export function useConversations({
     } else {
       // Fetch from server if not in local list
       try {
-        const response = await fetch(`/api/conversations/${id}`);
+        const response = await fetch(`/api/conversations/${id}?mode=${mode}`);
         if (response.ok) {
           const data = (await response.json()) as Conversation;
           setCurrentConversation(data);
@@ -103,7 +103,7 @@ export function useConversations({
         // Ignore errors, just don't select
       }
     }
-  }, [conversations]);
+  }, [conversations, mode]);
 
   const deleteConversation = useCallback(async (id: string) => {
     setError(null);

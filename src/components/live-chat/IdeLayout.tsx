@@ -1,6 +1,6 @@
 "use client";
 
-import { type RefObject } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { ConversationList, type Conversation } from "~/components/ConversationList";
 import { FileTree } from "~/components/FileTree";
 import { QuotaIndicator, LimitIndicator } from "~/components/QuotaIndicator";
@@ -39,6 +39,7 @@ interface IdeLayoutProps {
   selectedContent: string;
   onFileSelect: (path: string) => void;
   onDeleteFile: (path: string) => void;
+  onSaveFile: (path: string, content: string) => void | Promise<void>;
 }
 
 export function IdeLayout({
@@ -65,7 +66,19 @@ export function IdeLayout({
   selectedContent,
   onFileSelect,
   onDeleteFile,
+  onSaveFile,
 }: IdeLayoutProps) {
+  const [draftContent, setDraftContent] = useState(selectedContent);
+
+  useEffect(() => {
+    setDraftContent(selectedContent);
+  }, [selectedPath, selectedContent]);
+
+  const isDirty = useMemo(() => {
+    if (!selectedPath) return false;
+    return draftContent !== selectedContent;
+  }, [draftContent, selectedContent, selectedPath]);
+
   return (
     <div className="live-chat live-chat--ide">
       <div className="live-chat__sidebar">
@@ -110,10 +123,36 @@ export function IdeLayout({
             <div className="live-chat__editor-tab live-chat__editor-tab--active">
               {selectedPath ? selectedPath.split("/").pop() : "Untitled"}
             </div>
+            <div className="live-chat__editor-actions">
+              <button
+                className="live-chat__button"
+                disabled={isLoading || !selectedPath || !isDirty}
+                onClick={() => {
+                  if (!selectedPath) return;
+                  void onSaveFile(selectedPath, draftContent);
+                }}
+              >
+                Save
+              </button>
+              <button
+                className="live-chat__button live-chat__button--secondary"
+                disabled={isLoading || !selectedPath || !isDirty}
+                onClick={() => setDraftContent(selectedContent)}
+              >
+                Revert
+              </button>
+            </div>
           </div>
-          <pre className="live-chat__editor-content">
-            {selectedPath ? (selectedContent || "(empty)") : "Select a file to view its contents."}
-          </pre>
+          {selectedPath ? (
+            <textarea
+              className="live-chat__editor-content"
+              value={draftContent}
+              onChange={(e) => setDraftContent(e.target.value)}
+              spellCheck={false}
+            />
+          ) : (
+            <pre className="live-chat__editor-content">Select a file to view its contents.</pre>
+          )}
         </div>
         <div className="live-chat__ide-chat">
           <div className="live-chat__ide-chat-header">Extension Chat</div>

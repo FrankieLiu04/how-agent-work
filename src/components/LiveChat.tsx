@@ -81,8 +81,8 @@ export function LiveChat({
         }
         case "read_file": {
           const path = args.path as string;
-          const file = files.find((f) => f.path === path);
-          return file ? { content: "File content loaded" } : { error: "File not found" };
+          const content = await readFile(path);
+          return content != null ? { content } : { error: "File not found" };
         }
         case "write_file": {
           const path = args.path as string;
@@ -96,28 +96,61 @@ export function LiveChat({
             const parent = f.path.substring(0, f.path.lastIndexOf("/")) || "/";
             return parent === path;
           });
-          return { files: dirFiles.map((f) => f.path) };
+          return {
+            files: dirFiles.map((f) => ({ path: f.path, isDir: f.isDir, size: f.size })),
+          };
         }
         case "delete_file": {
           const path = args.path as string;
+          const ok = window.confirm(`Delete ${path}?`);
+          if (!ok) return { cancelled: true };
           const success = await deleteFile(path);
           return success ? { success: true } : { error: "Delete failed" };
         }
         case "run_command": {
           const command = args.command as string;
+          const ok = window.confirm(`Run command?\n\n${command}`);
+          if (!ok) return { cancelled: true };
           const result = await execCommand(command);
           return result;
         }
         case "search_files": {
           const pattern = args.pattern as string;
-          const matches = files.filter((f) => f.path.includes(pattern));
-          return { matches: matches.map((f) => f.path) };
+          const root = ((args.path as string) ?? "/").startsWith("/")
+            ? ((args.path as string) ?? "/")
+            : `/${(args.path as string) ?? ""}`;
+
+          let regex: RegExp;
+          try {
+            regex = new RegExp(pattern, "g");
+          } catch {
+            return { error: `Invalid regex: ${pattern}` };
+          }
+
+          const targetFiles = files.filter((f) => !f.isDir && (root === "/" || f.path.startsWith(`${root}/`) || f.path === root));
+          const results: string[] = [];
+
+          for (const f of targetFiles) {
+            const content = await readFile(f.path);
+            if (content == null) continue;
+            const lines = content.split("\n");
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i] ?? "";
+              if (regex.test(line)) {
+                results.push(`${f.path}:${i + 1}:${line}`);
+              }
+              regex.lastIndex = 0;
+            }
+          }
+
+          const limited = results.slice(0, 200);
+          return { matches: limited, total: results.length, truncated: results.length > limited.length };
         }
         default:
           return { error: `Unknown tool: ${toolCall.name}` };
       }
     },
-    [files, writeFile, deleteFile, execCommand]
+    [files, readFile, writeFile, deleteFile, execCommand]
   );
 
   const {
@@ -220,6 +253,19 @@ export function LiveChat({
     ]
   );
 
+  const handleSaveFile = useCallback(
+    async (path: string, content: string) => {
+      if (!path) return;
+      const success = await writeFile(path, content);
+      if (!success) return;
+      const refreshed = await readFile(path);
+      if (path === selectedPath) {
+        setSelectedContent(refreshed ?? "");
+      }
+    },
+    [readFile, writeFile, selectedPath]
+  );
+
   const handleFileSelect = useCallback(
     async (path: string) => {
       if (!path) return;
@@ -282,6 +328,7 @@ export function LiveChat({
         selectedContent={selectedContent}
         onFileSelect={handleFileSelect}
         onDeleteFile={deleteFile}
+        onSaveFile={handleSaveFile}
       />
     );
   }

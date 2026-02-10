@@ -1,12 +1,13 @@
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
+import type { ConversationMode } from "@prisma/client";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: RouteParams
 ): Promise<Response> {
   const session = await auth();
@@ -18,11 +19,26 @@ export async function GET(
   }
 
   const { id } = await params;
+  const url = new URL(request.url);
+  const modeParam = url.searchParams.get("mode");
+  const modeUpper = modeParam?.toUpperCase() ?? null;
+  const mode =
+    modeUpper && ["CHAT", "AGENT", "IDE", "CLI"].includes(modeUpper)
+      ? (modeUpper as ConversationMode)
+      : null;
+
+  if (modeUpper && !mode) {
+    return new Response(JSON.stringify({ error: "Invalid mode" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const conversation = await db.conversation.findFirst({
     where: {
       id,
       userId: session.user.id,
+      ...(mode ? { mode } : {}),
     },
     include: {
       messages: {

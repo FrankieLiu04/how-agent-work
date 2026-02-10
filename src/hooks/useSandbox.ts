@@ -96,14 +96,11 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
 
   const readFile = useCallback(async (path: string): Promise<string | null> => {
     try {
-      // For now, fetch full file list and find the file
-      // In production, you'd have a dedicated endpoint
-      const response = await fetch("/api/sandbox/files");
+      const response = await fetch(`/api/sandbox/file?path=${encodeURIComponent(path)}`);
       if (!response.ok) return null;
-      
-      const data = (await response.json()) as { files: Array<SandboxFile & { content?: string }> };
-      const file = data.files.find((f) => f.path === path);
-      return file?.content ?? null;
+
+      const data = (await response.json()) as { content?: string };
+      return data.content ?? null;
     } catch {
       return null;
     }

@@ -95,12 +95,17 @@ export function useChat({
   const [traceId, setTraceId] = useState<string | null>(null);
   
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeKeyRef = useRef<string>("none:none");
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const requestSeqRef = useRef(0);
+  const activeRequestIdRef = useRef(0);
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    activeRequestIdRef.current = 0;
     setIsLoading(false);
   }, []);
 
@@ -116,7 +121,10 @@ export function useChat({
     }
 
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/messages`);
+      const conversationMode = mode.toUpperCase();
+      const response = await fetch(
+        `/api/conversations/${conversationId}/messages?mode=${conversationMode}`
+      );
       if (!response.ok) {
         throw new Error(`Failed to load messages: ${response.status}`);
       }
@@ -147,7 +155,7 @@ export function useChat({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load messages");
     }
-  }, [conversationId]);
+  }, [conversationId, mode]);
 
   const saveMessage = useCallback(
     async (args: {
@@ -177,15 +185,28 @@ export function useChat({
   );
 
   useEffect(() => {
+    activeKeyRef.current = `${mode}:${conversationId ?? "none"}`;
+    activeRequestIdRef.current = 0;
     stopGeneration();
+    clearMessages();
+    setTraceId(null);
     void loadMessages();
-  }, [conversationId, mode, loadMessages, stopGeneration]);
+  }, [conversationId, mode, loadMessages, stopGeneration, clearMessages]);
 
   const sendMessage = useCallback(async (content: string, options?: { conversationId?: string | null }) => {
     if (!content.trim() || isLoading) return;
 
     const conversationIdOverride = options?.conversationId ?? null;
     const effectiveConversationId = conversationIdOverride ?? conversationId;
+    const startedKey = `${mode}:${effectiveConversationId ?? "none"}`;
+    const requestId = (requestSeqRef.current += 1);
+    activeRequestIdRef.current = requestId;
+    const guardedSetMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]) =>
+      setMessages((prev) => {
+        if (activeRequestIdRef.current !== requestId) return prev;
+        if (activeKeyRef.current !== startedKey) return prev;
+        return updater(prev);
+      });
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -194,7 +215,7 @@ export function useChat({
       content: content.trim(),
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    guardedSetMessages((prev) => [...prev, userMessage]);
     void saveMessage({
       role: "user",
       content: userMessage.content,
@@ -208,7 +229,7 @@ export function useChat({
     abortControllerRef.current = abortController;
 
     // Build messages array for API
-    const apiMessages = [...messages, userMessage].map((m) => ({
+    const apiMessages = [...messagesRef.current, userMessage].map((m) => ({
       role: m.role,
       content: m.content,
       ...(m.toolCalls && { tool_calls: m.toolCalls }),
@@ -219,321 +240,407 @@ export function useChat({
       .map((m) => `[${m.role}] ${m.content ?? ""}`)
       .join("\n");
 
-    const payload = {
-      model: "deepseek-chat",
-      stream: true,
-      x_mode: mode,
-      x_conversation_id: effectiveConversationId,
-      messages: apiMessages,
-    };
-
     try {
-      onProtocolEvent?.({
-        type: "req",
-        title: "POST /api/chat/stream",
-        content: payload,
-        context: contextText || "(Empty)",
-      });
+      const MAX_LOCAL_TOOL_ROUNDS = 4;
+      const MAX_LOCAL_TOOL_CALLS_PER_ROUND = 4;
+      const MAX_TOOL_RESULT_CHARS = 20_000;
 
-      const response = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: abortController.signal,
-        body: JSON.stringify(payload),
-      });
+      const stringifyToolResult = (result: unknown) => {
+        if (typeof result === "string") return result;
+        return JSON.stringify(result ?? "", null, 2);
+      };
 
-      // Get trace ID
-      const responseTraceId = response.headers.get("x-trace-id");
-      if (responseTraceId) {
-        setTraceId(responseTraceId);
+      const truncate = (text: string) =>
+        text.length > MAX_TOOL_RESULT_CHARS
+          ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n...(truncated)...`
+          : text;
+
+      const streamOneRound = async (wireMessages: unknown[], round: number) => {
+        const payload = {
+          model: "deepseek-chat",
+          stream: true,
+          x_mode: mode,
+          x_conversation_id: effectiveConversationId,
+          messages: wireMessages,
+        };
+
         onProtocolEvent?.({
-          type: "info",
-          title: "Trace ID",
-          content: responseTraceId,
-          traceId: responseTraceId,
+          type: "req",
+          title: `POST /api/chat/stream (round ${round + 1})`,
+          content: payload,
+          context: round === 0 ? contextText || "(Empty)" : undefined,
         });
-      }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as { error?: string }).error ?? `HTTP ${response.status}`);
-      }
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
+          body: JSON.stringify(payload),
+        });
 
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      // Create assistant message placeholder
-      const assistantMessage: ChatMessage = {
-        id: generateId(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-        isStreaming: true,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Parse SSE stream
-      const reader = response.body.getReader();
-      let fullContent = "";
-      let toolCalls: ToolCall[] = [];
-      const toolCallIndexMap = new Map<number, { arrayIndex: number; rawArgs: string }>();
-      let currentWorking: WorkingState | undefined;
-
-      const updateWorking = (
-        updater: (prev?: WorkingState) => WorkingState | undefined
-      ) => {
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id !== assistantMessage.id) return m;
-            const nextWorking = updater(m.working);
-            currentWorking = nextWorking;
-            return { ...m, working: nextWorking };
-          })
-        );
-      };
-
-      const appendWorkingSummary = (text: string) => {
-        updateWorking((prev) => ({
-          status: prev?.status ?? "working",
-          summary: [...(prev?.summary ?? []), text],
-        }));
-      };
-
-      const setWorkingStatus = (status: WorkingState["status"]) => {
-        updateWorking((prev) => ({
-          status,
-          summary: prev?.summary ?? [],
-        }));
-      };
-
-      for await (const data of parseSSE(reader)) {
-        if (abortController.signal.aborted) break;
-
-        try {
-          const parsed = JSON.parse(data) as {
-            type?: string;
-            tool_call_id?: string;
-            name?: string;
-            result?: unknown;
-            status?: WorkingState["status"];
-            text?: string;
-            choices?: Array<{
-              delta?: {
-                content?: string;
-                tool_calls?: Array<{
-                  index?: number;
-                  id?: string;
-                  function?: { name?: string; arguments?: string };
-                }>;
-              };
-              finish_reason?: string | null;
-            }>;
-          };
-
-          if (parsed.type === "working_summary" && parsed.text) {
-            appendWorkingSummary(parsed.text);
-            continue;
+        const responseTraceId = response.headers.get("x-trace-id");
+        if (responseTraceId) {
+          if (activeRequestIdRef.current === requestId && activeKeyRef.current === startedKey) {
+            setTraceId(responseTraceId);
           }
+          onProtocolEvent?.({
+            type: "info",
+            title: "Trace ID",
+            content: responseTraceId,
+            traceId: responseTraceId,
+          });
+        }
 
-          if (parsed.type === "working_state" && parsed.status) {
-            setWorkingStatus(parsed.status);
-            continue;
-          }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error((errorData as { error?: string }).error ?? `HTTP ${response.status}`);
+        }
 
-          if (parsed.type === "tool_result" && parsed.tool_call_id) {
-            const resultContent =
-              typeof parsed.result === "string"
-                ? parsed.result
-                : JSON.stringify(parsed.result ?? "", null, 2);
+        if (!response.body) {
+          throw new Error("No response body");
+        }
 
-            const updated = toolCalls.map((tc) =>
-              tc.id === parsed.tool_call_id
-                ? {
-                    ...tc,
-                    status: "completed" as const,
-                    result: { success: true, data: parsed.result },
-                  }
-                : tc
-            );
-            toolCalls = updated;
+        const assistantMessage: ChatMessage = {
+          id: generateId(),
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+          isStreaming: true,
+        };
+        guardedSetMessages((prev) => [...prev, assistantMessage]);
 
-            setMessages((prev) => [
-              ...prev.map((m) =>
-                m.id === assistantMessage.id ? { ...m, toolCalls: updated } : m
-              ),
-              {
-                id: generateId(),
+        const reader = response.body.getReader();
+        let fullContent = "";
+        let toolCalls: ToolCall[] = [];
+        let finishReason: string | null = null;
+        const toolCallIndexMap = new Map<number, { arrayIndex: number; rawArgs: string }>();
+        let currentWorking: WorkingState | undefined;
+
+        const updateWorking = (
+          updater: (prev?: WorkingState) => WorkingState | undefined
+        ) => {
+          guardedSetMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantMessage.id) return m;
+              const nextWorking = updater(m.working);
+              currentWorking = nextWorking;
+              return { ...m, working: nextWorking };
+            })
+          );
+        };
+
+        const appendWorkingSummary = (text: string) => {
+          updateWorking((prev) => ({
+            status: prev?.status ?? "working",
+            summary: [...(prev?.summary ?? []), text],
+          }));
+        };
+
+        const setWorkingStatus = (status: WorkingState["status"]) => {
+          updateWorking((prev) => ({
+            status,
+            summary: prev?.summary ?? [],
+          }));
+        };
+
+        for await (const data of parseSSE(reader)) {
+          if (abortController.signal.aborted) break;
+
+          try {
+            const parsed = JSON.parse(data) as {
+              type?: string;
+              tool_call_id?: string;
+              name?: string;
+              result?: unknown;
+              status?: WorkingState["status"];
+              text?: string;
+              choices?: Array<{
+                delta?: {
+                  content?: string;
+                  tool_calls?: Array<{
+                    index?: number;
+                    id?: string;
+                    function?: { name?: string; arguments?: string };
+                  }>;
+                };
+                finish_reason?: string | null;
+              }>;
+            };
+
+            if (parsed.type === "working_summary" && parsed.text) {
+              appendWorkingSummary(parsed.text);
+              continue;
+            }
+
+            if (parsed.type === "working_state" && parsed.status) {
+              setWorkingStatus(parsed.status);
+              continue;
+            }
+
+            if (parsed.type === "tool_result" && parsed.tool_call_id) {
+              const resultContent = stringifyToolResult(parsed.result);
+
+              const updated = toolCalls.map((tc) =>
+                tc.id === parsed.tool_call_id
+                  ? {
+                      ...tc,
+                      status: "completed" as const,
+                      result: { success: true, data: parsed.result },
+                    }
+                  : tc
+              );
+              toolCalls = updated;
+
+              guardedSetMessages((prev) => [
+                ...prev.map((m) =>
+                  m.id === assistantMessage.id ? { ...m, toolCalls: updated } : m
+                ),
+                {
+                  id: generateId(),
+                  role: "tool",
+                  content: resultContent,
+                  toolCallId: parsed.tool_call_id,
+                  timestamp: new Date(),
+                },
+              ]);
+
+              void saveMessage({
                 role: "tool",
                 content: resultContent,
                 toolCallId: parsed.tool_call_id,
-                timestamp: new Date(),
-              },
-            ]);
+                conversationIdOverride: effectiveConversationId,
+              });
 
-            void saveMessage({
-              role: "tool",
-              content: resultContent,
-              toolCallId: parsed.tool_call_id,
-              conversationIdOverride: effectiveConversationId,
-            });
+              continue;
+            }
 
-            continue;
-          }
+            const choice = parsed.choices?.[0];
+            const delta = choice?.delta;
+            if (choice?.finish_reason) {
+              finishReason = choice.finish_reason;
+            }
 
-          const delta = parsed.choices?.[0]?.delta;
-          const rawLine = `data: ${data}`;
-          
-          // Handle content
-          if (delta?.content) {
-            fullContent += delta.content;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessage.id
-                  ? { ...m, content: fullContent }
-                  : m
-              )
-            );
-            onProtocolEvent?.({
-              type: "res",
-              title: "SSE: Chunk",
-              content: rawLine,
-              token: delta.content,
-            });
-          }
+            const rawLine = `data: ${data}`;
 
-          // Handle tool calls (streaming: use index to track, accumulate arguments)
-          if (delta?.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              const existing = toolCallIndexMap.get(idx);
+            if (delta?.content) {
+              fullContent += delta.content;
+              guardedSetMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id ? { ...m, content: fullContent } : m
+                )
+              );
+              onProtocolEvent?.({
+                type: "res",
+                title: "SSE: Chunk",
+                content: rawLine,
+                token: delta.content,
+              });
+            }
 
-              if (existing != null) {
-                // Append to existing tool call arguments
-                existing.rawArgs += tc.function?.arguments ?? "";
-                if (tc.id && toolCalls[existing.arrayIndex]) {
-                  toolCalls[existing.arrayIndex] = {
-                    ...toolCalls[existing.arrayIndex]!,
-                    id: tc.id,
-                  };
-                }
-                try {
-                  const args = JSON.parse(existing.rawArgs) as Record<string, unknown>;
-                  toolCalls[existing.arrayIndex] = {
-                    ...toolCalls[existing.arrayIndex]!,
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                const existing = toolCallIndexMap.get(idx);
+
+                if (existing != null) {
+                  existing.rawArgs += tc.function?.arguments ?? "";
+                  if (tc.id && toolCalls[existing.arrayIndex]) {
+                    toolCalls[existing.arrayIndex] = {
+                      ...toolCalls[existing.arrayIndex]!,
+                      id: tc.id,
+                    };
+                  }
+                  try {
+                    const args = JSON.parse(existing.rawArgs) as Record<string, unknown>;
+                    toolCalls[existing.arrayIndex] = {
+                      ...toolCalls[existing.arrayIndex]!,
+                      arguments: args,
+                    };
+                  } catch {
+                    // ignore partial
+                  }
+                } else {
+                  const rawArgs = tc.function?.arguments ?? "";
+                  let args: Record<string, unknown> = {};
+                  try {
+                    args = JSON.parse(rawArgs) as Record<string, unknown>;
+                  } catch {
+                    // ignore partial
+                  }
+                  const arrayIndex = toolCalls.length;
+                  toolCalls.push({
+                    id: tc.id ?? `pending_${idx}`,
+                    name: tc.function?.name ?? "unknown",
                     arguments: args,
-                  };
-                } catch {
-                  // Arguments still incomplete, will parse when complete
+                    status: "pending",
+                  });
+                  toolCallIndexMap.set(idx, { arrayIndex, rawArgs });
                 }
-              } else {
-                // New tool call
-                const rawArgs = tc.function?.arguments ?? "";
-                let args: Record<string, unknown> = {};
-                try {
-                  args = JSON.parse(rawArgs) as Record<string, unknown>;
-                } catch {
-                  // Arguments might be incomplete
-                }
-                const arrayIndex = toolCalls.length;
-                toolCalls.push({
-                  id: tc.id ?? `pending_${idx}`,
-                  name: tc.function?.name ?? "unknown",
-                  arguments: args,
-                  status: "pending",
-                });
-                toolCallIndexMap.set(idx, { arrayIndex, rawArgs });
               }
+
+              guardedSetMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id ? { ...m, toolCalls: [...toolCalls] } : m
+                )
+              );
+              onProtocolEvent?.({
+                type: "res",
+                title: "SSE: Tool Call",
+                content: rawLine,
+              });
             }
-            
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessage.id
-                  ? { ...m, toolCalls: [...toolCalls] }
-                  : m
-              )
-            );
-            onProtocolEvent?.({
-              type: "res",
-              title: "SSE: Tool Call",
-              content: rawLine,
-            });
+          } catch {
+            // Ignore parse errors for partial chunks
           }
-
-          // Check for finish
-          if (parsed.choices?.[0]?.finish_reason === "tool_calls") {
-            // Execute tool calls
-            if (onToolCall && toolCalls.length > 0) {
-              for (const tc of toolCalls) {
-                tc.status = "running";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMessage.id
-                      ? { ...m, toolCalls: [...toolCalls] }
-                      : m
-                  )
-                );
-
-                try {
-                  const result = await onToolCall(tc);
-                  tc.status = "completed";
-                  tc.result = { success: true, data: result };
-                } catch (err) {
-                  tc.status = "error";
-                  tc.result = { success: false, error: String(err) };
-                }
-
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMessage.id
-                      ? { ...m, toolCalls: [...toolCalls] }
-                      : m
-                  )
-                );
-              }
-            }
-          }
-        } catch {
-          // Ignore parse errors for partial chunks
         }
+
+        onProtocolEvent?.({
+          type: "info",
+          title: "SSE: [DONE]",
+          content: "[DONE]",
+        });
+
+        guardedSetMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessage.id
+              ? {
+                  ...m,
+                  isStreaming: false,
+                  working:
+                    m.working?.status === "working"
+                      ? { ...m.working, status: "done" }
+                      : m.working,
+                }
+              : m
+          )
+        );
+
+        if (currentWorking?.status === "working") {
+          currentWorking = { ...currentWorking, status: "done" };
+        }
+
+        return {
+          assistantMessageId: assistantMessage.id,
+          fullContent,
+          toolCalls,
+          finishReason,
+          working: currentWorking,
+        };
+      };
+
+      let currentWireMessages: unknown[] = apiMessages;
+      for (let round = 0; round <= MAX_LOCAL_TOOL_ROUNDS; round++) {
+        const roundResult = await streamOneRound(currentWireMessages, round);
+
+        const shouldExecuteLocalTools =
+          roundResult.finishReason === "tool_calls" &&
+          onToolCall != null &&
+          roundResult.toolCalls.length > 0 &&
+          round < MAX_LOCAL_TOOL_ROUNDS;
+
+        if (!shouldExecuteLocalTools) {
+          void saveMessage({
+            role: "assistant",
+            content: roundResult.fullContent,
+            toolCalls: roundResult.toolCalls.length > 0 ? roundResult.toolCalls : undefined,
+            working: roundResult.working,
+            conversationIdOverride: effectiveConversationId,
+          });
+          onSuccess?.();
+          break;
+        }
+
+        const limitedToolCalls = roundResult.toolCalls.slice(0, MAX_LOCAL_TOOL_CALLS_PER_ROUND);
+        const toolWireMessages: Array<{
+          role: "tool";
+          tool_call_id: string;
+          content: string;
+        }> = [];
+
+        for (const tc of limitedToolCalls) {
+          tc.status = "running";
+          guardedSetMessages((prev) =>
+            prev.map((m) =>
+              m.id === roundResult.assistantMessageId
+                ? { ...m, toolCalls: [...roundResult.toolCalls] }
+                : m
+            )
+          );
+
+          let toolResult: unknown;
+          try {
+            toolResult = await onToolCall(tc);
+            tc.status = "completed";
+            tc.result = { success: true, data: toolResult };
+          } catch (err) {
+            tc.status = "error";
+            tc.result = { success: false, error: String(err) };
+            toolResult = { error: String(err) };
+          }
+
+          guardedSetMessages((prev) =>
+            prev.map((m) =>
+              m.id === roundResult.assistantMessageId
+                ? { ...m, toolCalls: [...roundResult.toolCalls] }
+                : m
+            )
+          );
+
+          const toolContent = truncate(stringifyToolResult(toolResult));
+          toolWireMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: toolContent,
+          });
+
+          guardedSetMessages((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              role: "tool",
+              content: toolContent,
+              toolCallId: tc.id,
+              timestamp: new Date(),
+            },
+          ]);
+
+          void saveMessage({
+            role: "tool",
+            content: toolContent,
+            toolCallId: tc.id,
+            conversationIdOverride: effectiveConversationId,
+          });
+        }
+
+        void saveMessage({
+          role: "assistant",
+          content: roundResult.fullContent,
+          toolCalls: roundResult.toolCalls.length > 0 ? roundResult.toolCalls : undefined,
+          working: roundResult.working,
+          conversationIdOverride: effectiveConversationId,
+        });
+
+        onSuccess?.();
+
+        const assistantWireMessage = {
+          role: "assistant",
+          content: roundResult.fullContent,
+          tool_calls: limitedToolCalls.map((tc) => ({
+            id: tc.id,
+            type: "function",
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.arguments ?? {}),
+            },
+          })),
+        };
+
+        currentWireMessages = [
+          ...currentWireMessages,
+          assistantWireMessage,
+          ...toolWireMessages,
+        ];
       }
-
-      onProtocolEvent?.({
-        type: "info",
-        title: "SSE: [DONE]",
-        content: "[DONE]",
-      });
-
-      // Mark streaming as complete
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMessage.id
-            ? {
-                ...m,
-                isStreaming: false,
-                working:
-                  m.working?.status === "working"
-                    ? { ...m.working, status: "done" }
-                    : m.working,
-              }
-            : m
-        )
-      );
-
-      if (currentWorking?.status === "working") {
-        currentWorking = { ...currentWorking, status: "done" };
-      }
-
-      void saveMessage({
-        role: "assistant",
-        content: fullContent,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        working: currentWorking,
-        conversationIdOverride: effectiveConversationId,
-      });
-
-      // Notify success (e.g., to refresh quota)
-      onSuccess?.();
 
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -541,7 +648,9 @@ export function useChat({
         return;
       }
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
+      if (activeRequestIdRef.current === requestId && activeKeyRef.current === startedKey) {
+        setError(errorMessage);
+      }
       onError?.(err instanceof Error ? err : new Error(errorMessage));
       onProtocolEvent?.({
         type: "info",
@@ -549,10 +658,17 @@ export function useChat({
         content: errorMessage,
       });
     } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
+      if (activeRequestIdRef.current === requestId) {
+        setIsLoading(false);
+        abortControllerRef.current = null;
+        activeRequestIdRef.current = 0;
+      }
     }
-  }, [messages, mode, conversationId, isLoading, onToolCall, onError, onSuccess, onProtocolEvent, saveMessage]);
+  }, [mode, conversationId, isLoading, onToolCall, onError, onSuccess, onProtocolEvent, saveMessage]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   return {
     messages,

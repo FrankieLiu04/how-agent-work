@@ -5,14 +5,36 @@ on:
     branches: ["main"]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       AUTH_SECRET: ci_dummy_secret_ci_dummy_secret_ci_dummy_secret
       AUTH_GITHUB_ID: ci_dummy_github_id
       AUTH_GITHUB_SECRET: ci_dummy_github_secret
-      DATABASE_URL: postgresql://postgres:password@localhost:5432/how_agent_work
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: true
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?schema=public
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +45,8 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run test
-
       - run: npm run typecheck
+
+      - run: npm run test
 
       - run: npm run build
