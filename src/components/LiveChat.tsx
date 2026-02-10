@@ -267,35 +267,40 @@ export function LiveChat({
 
   const renderChatPane = (options?: { compactTools?: boolean; className?: string; emptyVariant?: "default" | "copilot" }) => (
     <div className={`live-chat-main ${options?.className ?? ""}`}>
-      <div className="messages-container" role="log" aria-live="polite">
-        {messages.length === 0 ? (
-          renderEmptyState(options?.emptyVariant ?? "default")
-        ) : (
-          messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} compactTools={options?.compactTools} />
-          ))
+      <div className="chat-shell">
+        <div className="messages-container" role="log" aria-live="polite">
+          {messages.length === 0 ? (
+            renderEmptyState(options?.emptyVariant ?? "default")
+          ) : (
+            messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} compactTools={options?.compactTools} />
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {(chatError || traceId) && (
+          <div className="chat-status">
+            {chatError && (
+              <div className="chat-error">
+                <span>⚠️ {chatError}</span>
+                <button onClick={() => clearMessages()}>Dismiss</button>
+              </div>
+            )}
+            {traceId && (
+              <div className="trace-id">
+                Trace: <a href={`/api/debug/traces?id=${traceId}`} target="_blank" rel="noreferrer">{traceId.slice(0, 8)}...</a>
+              </div>
+            )}
+          </div>
         )}
-        <div ref={messagesEndRef} />
+
+        <ChatInput
+          onSend={handleSend}
+          disabled={isLoading || quota.used >= quota.limit}
+          mode={mode}
+        />
       </div>
-
-      {chatError && (
-        <div className="chat-error">
-          <span>⚠️ {chatError}</span>
-          <button onClick={() => clearMessages()}>Dismiss</button>
-        </div>
-      )}
-
-      {traceId && (
-        <div className="trace-id">
-          Trace: <a href={`/api/debug/traces?id=${traceId}`} target="_blank" rel="noreferrer">{traceId.slice(0, 8)}...</a>
-        </div>
-      )}
-
-      <ChatInput
-        onSend={handleSend}
-        disabled={isLoading || quota.used >= quota.limit}
-        mode={mode}
-      />
     </div>
   );
 
@@ -888,6 +893,13 @@ export function LiveChat({
           overflow: hidden;
         }
 
+        .chat-shell {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
         .messages-container {
           flex: 1;
           overflow-y: auto;
@@ -896,6 +908,16 @@ export function LiveChat({
           flex-direction: column;
           gap: 12px;
           min-height: 0;
+        }
+
+        .chat-status {
+          border-top: 1px solid var(--border);
+          background: var(--bg);
+          padding: 6px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          font-size: 12px;
         }
 
         .messages-empty {
@@ -929,9 +951,10 @@ export function LiveChat({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 12px;
           background: rgba(255, 59, 48, 0.1);
-          border-top: 1px solid rgba(255, 59, 48, 0.2);
+          border: 1px solid rgba(255, 59, 48, 0.2);
+          border-radius: 6px;
+          padding: 6px 10px;
           font-size: 13px;
           color: var(--error, #ff3b30);
         }
@@ -947,11 +970,9 @@ export function LiveChat({
         }
 
         .trace-id {
-          padding: 4px 12px;
           font-size: 10px;
           color: var(--text-sec);
           font-family: var(--font-mono);
-          border-top: 1px solid var(--border);
         }
 
         .trace-id a {
@@ -1015,6 +1036,7 @@ function MessageBubble({
           line-height: 1.5;
           white-space: pre-wrap;
           word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         .message-bubble.user .bubble-content {
