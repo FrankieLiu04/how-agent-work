@@ -57,6 +57,11 @@ export function LiveChat({
     autoLoad: isAuthed,
   });
 
+  const expectedConversationMode =
+    mode === "chat" ? "CHAT" : mode === "agent" ? "AGENT" : mode === "ide" ? "IDE" : "CLI";
+  const effectiveCurrentConversation =
+    currentConversation?.mode === expectedConversationMode ? currentConversation : null;
+
   const {
     files,
     limits,
@@ -162,7 +167,7 @@ export function LiveChat({
     traceId,
   } = useChat({
     mode,
-    conversationId: currentConversation?.id,
+    conversationId: effectiveCurrentConversation?.id,
     onToolCall: mode === "agent" ? undefined : handleToolCall,
     onSuccess: refreshQuota,
     onProtocolEvent,
@@ -186,18 +191,27 @@ export function LiveChat({
   }, [conversationsError]);
 
   useEffect(() => {
-    if (!currentConversation?.id) return;
+    if (!effectiveCurrentConversation?.id) return;
     setLastConversationByMode((prev) => {
-      const next = { ...prev, [mode]: currentConversation.id };
+      const bucket =
+        effectiveCurrentConversation.mode === "CHAT"
+          ? "chat"
+          : effectiveCurrentConversation.mode === "AGENT"
+            ? "agent"
+            : effectiveCurrentConversation.mode === "IDE"
+              ? "ide"
+              : "cli";
+      if (bucket !== mode) return prev;
+      const next = { ...prev, [bucket]: effectiveCurrentConversation.id };
       if (typeof window !== "undefined") {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       }
       return next;
     });
-  }, [currentConversation?.id, mode]);
+  }, [effectiveCurrentConversation?.id, effectiveCurrentConversation?.mode, mode]);
 
   useEffect(() => {
-    if (currentConversation || conversations.length === 0) return;
+    if (effectiveCurrentConversation || conversations.length === 0) return;
     const remembered = lastConversationByMode[mode];
     const match = remembered ? conversations.find((c) => c.id === remembered) : null;
     if (match) {
@@ -207,7 +221,7 @@ export function LiveChat({
     if (conversations[0]) {
       void selectConversation(conversations[0].id);
     }
-  }, [mode, conversations, currentConversation, lastConversationByMode, selectConversation]);
+  }, [mode, conversations, effectiveCurrentConversation, lastConversationByMode, selectConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -219,7 +233,7 @@ export function LiveChat({
         return;
       }
 
-      let effectiveConversationId = currentConversation?.id ?? null;
+      let effectiveConversationId = effectiveCurrentConversation?.id ?? null;
       if (!effectiveConversationId) {
         const created = await createConversation();
         effectiveConversationId = created?.id ?? null;
@@ -243,7 +257,7 @@ export function LiveChat({
     [
       isAuthed,
       mode,
-      currentConversation,
+      effectiveCurrentConversation,
       files.length,
       createConversation,
       selectConversation,
@@ -308,7 +322,7 @@ export function LiveChat({
         mode={mode}
         messages={messages}
         conversations={conversations}
-        currentId={currentConversation?.id ?? null}
+        currentId={effectiveCurrentConversation?.id ?? null}
         onSelect={selectConversation}
         onDelete={deleteConversation}
         onNew={createConversation}
@@ -339,7 +353,7 @@ export function LiveChat({
         messages={messages}
         terminalLines={terminalLines}
         conversations={conversations}
-        currentId={currentConversation?.id ?? null}
+        currentId={effectiveCurrentConversation?.id ?? null}
         onSelect={selectConversation}
         onDelete={deleteConversation}
         onNew={createConversation}
@@ -361,7 +375,7 @@ export function LiveChat({
       mode={mode}
       messages={messages}
       conversations={conversations}
-      currentId={currentConversation?.id ?? null}
+      currentId={effectiveCurrentConversation?.id ?? null}
       onSelect={selectConversation}
       onDelete={deleteConversation}
       onNew={createConversation}
