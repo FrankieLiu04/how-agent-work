@@ -13,6 +13,7 @@ import {
 import { env } from "~/env";
 import { getToolsForMode } from "~/lib/tools/definitions";
 import { getSystemPrompt } from "~/lib/tools/prompts";
+import { executeTavilySearch, formatTavilyResults } from "~/lib/tools/tavily";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system" | string;
@@ -36,6 +37,8 @@ type ChatCompletionRequest = {
 
 const MAX_INPUT_LENGTH = 500;
 const MAX_OUTPUT_TOKENS = 800;
+const MAX_AGENT_TOOL_ROUNDS = 5;
+const MAX_TOOL_CALLS_PER_ROUND = 3;
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -102,6 +105,67 @@ function prepareMessages(
 
   // Add system message at the beginning
   return [{ role: "system", content: systemPrompt }, ...messages];
+}
+
+type AccumulatedToolCall = {
+  id: string;
+  name: string;
+  argumentsText: string;
+};
+
+function appendToolCallDelta(
+  toolCalls: Map<string, AccumulatedToolCall>,
+  delta: { id: string; function?: { name?: string; arguments?: string } }
+): void {
+  const existing = toolCalls.get(delta.id);
+  const nextArgs = delta.function?.arguments ?? "";
+  if (existing) {
+    toolCalls.set(delta.id, {
+      ...existing,
+      argumentsText: existing.argumentsText + nextArgs,
+    });
+    return;
+  }
+  toolCalls.set(delta.id, {
+    id: delta.id,
+    name: delta.function?.name ?? "unknown",
+    argumentsText: nextArgs,
+  });
+}
+
+function parseToolArguments(raw: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function executeToolCall(
+  name: string,
+  args: Record<string, unknown>
+): Promise<string> {
+  switch (name) {
+    case "tavily_search": {
+      const query = typeof args.query === "string" ? args.query : "";
+      const response = await executeTavilySearch(query || "latest tech news");
+      return formatTavilyResults(response);
+    }
+    default:
+      return `Unknown tool: ${name}`;
+  }
+}
+
+function buildWorkingSummary(
+  name: string,
+  args: Record<string, unknown>
+): string {
+  if (name === "tavily_search") {
+    const query = typeof args.query === "string" ? args.query : "";
+    return query ? `检索: ${query}` : "检索: 未提供查询词";
+  }
+  return `调用工具: ${name}`;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -212,7 +276,6 @@ export async function POST(request: Request): Promise<Response> {
 
     // Use DeepSeek API (OpenAI compatible)
     const baseUrl = env.OPENAI_BASE_URL ?? "https://api.deepseek.com";
-    const upstreamSpan = startSpan(trace, "deepseek.upstream");
 
     // Prepare messages with system prompt
     const messages = reqBody.messages ?? [{ role: "user", content: prompt }];
@@ -220,6 +283,268 @@ export async function POST(request: Request): Promise<Response> {
 
     // Get tools for the mode
     const tools = getToolsForMode(mode);
+
+    if (mode === "agent" && tools) {
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      const stream = new ReadableStream<Uint8Array>({
+        start: async (controller) => {
+          let firstByteAt: number | null = null;
+          let traceFinished = false;
+
+          const finalizeTrace = (status: number) => {
+            if (traceFinished) return;
+            traceFinished = true;
+            recordSample(
+              "request_latency_ms{route=/api/chat/stream}",
+              Date.now() - trace.startMs
+            );
+            finishTrace(trace, {
+              status,
+              ttfbMs: firstByteAt ? firstByteAt - trace.startMs : null,
+            });
+          };
+
+          const writeData = (data: string) => {
+            if (firstByteAt === null) {
+              firstByteAt = Date.now();
+              recordSample(
+                "ttfb_ms{route=/api/chat/stream}",
+                firstByteAt - trace.startMs
+              );
+            }
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          };
+
+          let currentMessages = preparedMessages;
+          let round = 0;
+          let allowTools = true;
+          let workingActive = false;
+          let workingDoneSent = false;
+
+          try {
+            while (true) {
+              if (request.signal.aborted) throw new Error("aborted");
+
+              const upstreamSpan = startSpan(trace, "deepseek.upstream");
+              const upstream = await fetch(
+                `${baseUrl.replace(/\/$/, "")}/chat/completions`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: currentMessages,
+                    max_tokens: MAX_OUTPUT_TOKENS,
+                    stream: true,
+                    ...(allowTools ? { tools } : {}),
+                  }),
+                  signal: request.signal,
+                }
+              );
+              finishSpan(upstreamSpan);
+
+              if (!upstream.ok || !upstream.body) {
+                const text = await upstream.text().catch(() => "");
+                incrementCounter(
+                  "upstream_error_total{provider=deepseek,route=/api/chat/stream}"
+                );
+                writeData(
+                  JSON.stringify({
+                    type: "error",
+                    error: "upstream_error",
+                    status: upstream.status,
+                    body: text,
+                  })
+                );
+                writeData("[DONE]");
+                controller.close();
+                finalizeTrace(502);
+                return;
+              }
+
+              const reader = upstream.body.getReader();
+              let buffer = "";
+              let sawToolFinish = false;
+              const toolCalls = new Map<string, AccumulatedToolCall>();
+
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (!value) continue;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() ?? "";
+
+                for (const line of lines) {
+                  if (!line.startsWith("data: ")) continue;
+                  const data = line.slice(6).trim();
+                  if (!data) continue;
+                  if (data === "[DONE]") continue;
+
+                  let parsed: {
+                    choices?: Array<{
+                      delta?: {
+                        content?: string;
+                        tool_calls?: Array<{
+                          id: string;
+                          function?: { name?: string; arguments?: string };
+                        }>;
+                      };
+                      finish_reason?: string | null;
+                    }>;
+                  } | null = null;
+
+                  try {
+                    parsed = JSON.parse(data) as typeof parsed;
+                  } catch {
+                    parsed = null;
+                  }
+
+                  const choice = parsed?.choices?.[0];
+                  const delta = choice?.delta;
+
+                  if (delta?.content && workingActive && !workingDoneSent) {
+                    writeData(
+                      JSON.stringify({
+                        type: "working_state",
+                        status: "done",
+                      })
+                    );
+                    workingDoneSent = true;
+                  }
+
+                  if (delta?.tool_calls) {
+                    for (const tc of delta.tool_calls) {
+                      appendToolCallDelta(toolCalls, tc);
+                    }
+                  }
+
+                  if (choice?.finish_reason === "tool_calls") {
+                    sawToolFinish = true;
+                  }
+
+                  if (data !== "[DONE]") {
+                    writeData(data);
+                  }
+                }
+              }
+
+              if (!sawToolFinish) {
+                break;
+              }
+
+              round += 1;
+              if (round > MAX_AGENT_TOOL_ROUNDS) {
+                currentMessages = [
+                  ...currentMessages,
+                  {
+                    role: "system",
+                    content: "已达到工具调用上限，请基于已有信息给出最终答案。",
+                  },
+                ];
+                allowTools = false;
+                continue;
+              }
+
+              const limitedToolCalls = Array.from(toolCalls.values()).slice(
+                0,
+                MAX_TOOL_CALLS_PER_ROUND
+              );
+
+              if (limitedToolCalls.length === 0) {
+                break;
+              }
+
+              if (!workingActive) {
+                writeData(
+                  JSON.stringify({
+                    type: "working_state",
+                    status: "working",
+                  })
+                );
+                workingActive = true;
+                workingDoneSent = false;
+              }
+
+              for (const call of limitedToolCalls) {
+                const args = parseToolArguments(call.argumentsText);
+                writeData(
+                  JSON.stringify({
+                    type: "working_summary",
+                    text: buildWorkingSummary(call.name, args),
+                  })
+                );
+                let resultText = "";
+                try {
+                  resultText = await executeToolCall(call.name, args);
+                } catch (error) {
+                  resultText = `Tool execution failed: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`;
+                }
+
+                writeData(
+                  JSON.stringify({
+                    type: "working_summary",
+                    text: "已获取检索结果，正在整理...",
+                  })
+                );
+
+                writeData(
+                  JSON.stringify({
+                    type: "tool_result",
+                    tool_call_id: call.id,
+                    name: call.name,
+                    result: resultText,
+                  })
+                );
+
+                currentMessages = [
+                  ...currentMessages,
+                  {
+                    role: "tool",
+                    tool_call_id: call.id,
+                    content: resultText,
+                  },
+                ];
+              }
+            }
+
+            writeData("[DONE]");
+            controller.close();
+            finalizeTrace(200);
+          } catch {
+            controller.close();
+            finalizeTrace(499);
+          }
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Trace-Id": traceId,
+          "X-Provider": "deepseek",
+          ...(quota
+            ? {
+                "X-Quota-Remaining": String(quota.remaining),
+                "X-Quota-Reset": quota.resetAt.toISOString(),
+              }
+            : {}),
+        },
+      });
+    }
+
+    const upstreamSpan = startSpan(trace, "deepseek.upstream");
 
     const upstream = await fetch(
       `${baseUrl.replace(/\/$/, "")}/chat/completions`,

@@ -52,6 +52,7 @@ export async function GET(
         content: m.content,
         toolCalls: m.toolCalls,
         toolCallId: m.toolCallId,
+        working: m.working,
         createdAt: m.createdAt.toISOString(),
       })),
       limits: {
@@ -121,6 +122,7 @@ export async function POST(
     content?: string;
     toolCalls?: unknown;
     toolCallId?: string;
+    working?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -149,6 +151,7 @@ export async function POST(
       content: body.content ?? null,
       toolCalls: body.toolCalls ? JSON.parse(JSON.stringify(body.toolCalls)) : null,
       toolCallId: body.toolCallId ?? null,
+      working: body.working ? JSON.parse(JSON.stringify(body.working)) : null,
     },
   });
 
@@ -176,6 +179,7 @@ export async function POST(
       content: message.content,
       toolCalls: message.toolCalls,
       toolCallId: message.toolCallId,
+      working: message.working,
       createdAt: message.createdAt.toISOString(),
     }),
     {

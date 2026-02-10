@@ -55,6 +55,7 @@ export async function GET(
         content: m.content,
         toolCalls: m.toolCalls,
         toolCallId: m.toolCallId,
+        working: m.working,
         createdAt: m.createdAt.toISOString(),
       })),
     }),

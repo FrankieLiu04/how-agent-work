@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ToolCallDisplay } from "~/components/ToolCallDisplay";
-import { type ChatMessage } from "~/hooks/useChat";
+import { type ChatMessage, type ChatMode } from "~/hooks/useChat";
 
 function MessageContent({ message }: { message: ChatMessage }) {
   if (!message.content) {
@@ -53,11 +54,31 @@ function MessageContent({ message }: { message: ChatMessage }) {
 export function MessageBubble({
   message,
   compactTools = false,
+  mode,
 }: {
   message: ChatMessage;
   compactTools?: boolean;
+  mode: ChatMode;
 }) {
   const roleClass = `live-chat__bubble--${message.role}`;
+  const hasWorking =
+    mode === "agent" &&
+    message.role === "assistant" &&
+    message.working &&
+    message.working.summary.length > 0;
+  const [workingCollapsed, setWorkingCollapsed] = useState(
+    message.working?.status === "done"
+  );
+
+  useEffect(() => {
+    if (message.working?.status === "done") {
+      setWorkingCollapsed(true);
+    }
+  }, [message.working?.status]);
+
+  const showToolCalls = !(hasWorking && message.role === "assistant");
+  const workingStatusLabel =
+    message.working?.status === "working" ? "Working" : "Done";
 
   return (
     <div className={`live-chat__bubble ${roleClass}`}>
@@ -71,7 +92,40 @@ export function MessageBubble({
             <span className="live-chat__streaming-cursor">▍</span>
           )}
         </div>
-        {message.toolCalls && message.toolCalls.length > 0 && (
+        {hasWorking && message.working && (
+          <div className={`live-chat__working ${workingCollapsed ? "is-collapsed" : ""}`}>
+            <button
+              type="button"
+              className="live-chat__working-toggle"
+              onClick={() => setWorkingCollapsed((prev) => !prev)}
+            >
+              <span className="live-chat__working-icon">🔍</span>
+              <span className="live-chat__working-title">Working</span>
+              <span className={`live-chat__working-status live-chat__working-status--${message.working.status}`}>
+                {workingStatusLabel}
+              </span>
+              <span className="live-chat__working-caret">
+                {workingCollapsed ? "▶" : "▼"}
+              </span>
+            </button>
+            {!workingCollapsed && (
+              <div className="live-chat__working-body">
+                {message.toolCalls && message.toolCalls.length > 0 && (
+                  <ToolCallDisplay toolCalls={message.toolCalls} compact />
+                )}
+                <div className="live-chat__working-summary">
+                  {message.working.summary.map((item, index) => (
+                    <div key={`${message.id}-work-${index}`} className="live-chat__working-line">
+                      <span className="live-chat__working-bullet">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {showToolCalls && message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallDisplay toolCalls={message.toolCalls} compact={compactTools} />
         )}
       </div>

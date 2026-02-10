@@ -130,7 +130,7 @@ export function LiveChat({
   } = useChat({
     mode,
     conversationId: currentConversation?.id,
-    onToolCall: handleToolCall,
+    onToolCall: mode === "agent" ? undefined : handleToolCall,
     onSuccess: refreshQuota,
     onProtocolEvent,
   });

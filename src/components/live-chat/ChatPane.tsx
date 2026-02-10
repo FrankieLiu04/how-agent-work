@@ -68,7 +68,12 @@ export function ChatPane({
           {messages.length === 0
             ? renderEmptyState()
             : messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} compactTools={compactTools} />
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  compactTools={compactTools}
+                  mode={mode}
+                />
               ))}
           <div ref={messagesEndRef} />
         </div>

@@ -5,11 +5,18 @@ import type { ToolCall } from "~/components/ToolCallDisplay";
 
 export type MessageRole = "user" | "assistant" | "tool";
 
+export type WorkingState = {
+  status: "working" | "done";
+  summary: string[];
+};
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   toolCalls?: ToolCall[];
+  toolCallId?: string;
+  working?: WorkingState;
   timestamp: Date;
   isStreaming?: boolean;
 }
@@ -119,6 +126,8 @@ export function useChat({
           role: MessageRole;
           content?: string | null;
           toolCalls?: ToolCall[] | null;
+          working?: WorkingState | null;
+          toolCallId?: string | null;
           createdAt: string;
         }>;
       };
@@ -129,6 +138,8 @@ export function useChat({
           role: m.role,
           content: m.content ?? "",
           toolCalls: m.toolCalls ?? undefined,
+          toolCallId: m.toolCallId ?? undefined,
+          working: m.working ?? undefined,
           timestamp: new Date(m.createdAt),
           isStreaming: false,
         }))
@@ -144,6 +155,7 @@ export function useChat({
       content?: string;
       toolCalls?: ToolCall[];
       toolCallId?: string;
+      working?: WorkingState;
       conversationIdOverride?: string | null;
     }) => {
       const targetId = args.conversationIdOverride ?? conversationId;
@@ -157,6 +169,7 @@ export function useChat({
           content: args.content,
           toolCalls: args.toolCalls,
           toolCallId: args.toolCallId,
+          working: args.working,
         }),
       });
     },
@@ -199,6 +212,7 @@ export function useChat({
       role: m.role,
       content: m.content,
       ...(m.toolCalls && { tool_calls: m.toolCalls }),
+      ...(m.role === "tool" && m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
     }));
 
     const contextText = apiMessages
@@ -263,12 +277,46 @@ export function useChat({
       const reader = response.body.getReader();
       let fullContent = "";
       let toolCalls: ToolCall[] = [];
+      let currentWorking: WorkingState | undefined;
+
+      const updateWorking = (
+        updater: (prev?: WorkingState) => WorkingState | undefined
+      ) => {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== assistantMessage.id) return m;
+            const nextWorking = updater(m.working);
+            currentWorking = nextWorking;
+            return { ...m, working: nextWorking };
+          })
+        );
+      };
+
+      const appendWorkingSummary = (text: string) => {
+        updateWorking((prev) => ({
+          status: prev?.status ?? "working",
+          summary: [...(prev?.summary ?? []), text],
+        }));
+      };
+
+      const setWorkingStatus = (status: WorkingState["status"]) => {
+        updateWorking((prev) => ({
+          status,
+          summary: prev?.summary ?? [],
+        }));
+      };
 
       for await (const data of parseSSE(reader)) {
         if (abortController.signal.aborted) break;
 
         try {
           const parsed = JSON.parse(data) as {
+            type?: string;
+            tool_call_id?: string;
+            name?: string;
+            result?: unknown;
+            status?: WorkingState["status"];
+            text?: string;
             choices?: Array<{
               delta?: {
                 content?: string;
@@ -280,6 +328,56 @@ export function useChat({
               finish_reason?: string | null;
             }>;
           };
+
+          if (parsed.type === "working_summary" && parsed.text) {
+            appendWorkingSummary(parsed.text);
+            continue;
+          }
+
+          if (parsed.type === "working_state" && parsed.status) {
+            setWorkingStatus(parsed.status);
+            continue;
+          }
+
+          if (parsed.type === "tool_result" && parsed.tool_call_id) {
+            const resultContent =
+              typeof parsed.result === "string"
+                ? parsed.result
+                : JSON.stringify(parsed.result ?? "", null, 2);
+
+            const updated = toolCalls.map((tc) =>
+              tc.id === parsed.tool_call_id
+                ? {
+                    ...tc,
+                    status: "completed" as const,
+                    result: { success: true, data: parsed.result },
+                  }
+                : tc
+            );
+            toolCalls = updated;
+
+            setMessages((prev) => [
+              ...prev.map((m) =>
+                m.id === assistantMessage.id ? { ...m, toolCalls: updated } : m
+              ),
+              {
+                id: generateId(),
+                role: "tool",
+                content: resultContent,
+                toolCallId: parsed.tool_call_id,
+                timestamp: new Date(),
+              },
+            ]);
+
+            void saveMessage({
+              role: "tool",
+              content: resultContent,
+              toolCallId: parsed.tool_call_id,
+              conversationIdOverride: effectiveConversationId,
+            });
+
+            continue;
+          }
 
           const delta = parsed.choices?.[0]?.delta;
           const rawLine = `data: ${data}`;
@@ -397,15 +495,27 @@ export function useChat({
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessage.id
-            ? { ...m, isStreaming: false }
+            ? {
+                ...m,
+                isStreaming: false,
+                working:
+                  m.working?.status === "working"
+                    ? { ...m.working, status: "done" }
+                    : m.working,
+              }
             : m
         )
       );
+
+      if (currentWorking?.status === "working") {
+        currentWorking = { ...currentWorking, status: "done" };
+      }
 
       void saveMessage({
         role: "assistant",
         content: fullContent,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        working: currentWorking,
         conversationIdOverride: effectiveConversationId,
       });
 

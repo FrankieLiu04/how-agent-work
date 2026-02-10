@@ -135,6 +135,7 @@ model ConversationMessage {
     content        String?  @db.Text
     toolCalls      Json?    // 存储 tool_calls 数组
     toolCallId     String?  // tool message 的关联 ID
+    working        Json?    // agent 模式工作过程记录
     createdAt      DateTime @default(now())
 
     conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
