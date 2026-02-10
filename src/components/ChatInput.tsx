@@ -103,7 +103,7 @@ export function ChatInput({
         <span className={`char-count ${isOverLimit ? "over" : isNearLimit ? "near" : ""}`}>
           {charCount}/{maxLength}
         </span>
-        {disabled && <span className="input-status">Generating...</span>}
+        {disabled && <span className="input-status">⏳ Generating...</span>}
       </div>
       <style jsx>{`
         .chat-input-container {

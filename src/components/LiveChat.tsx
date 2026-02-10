@@ -238,6 +238,8 @@ export function LiveChat({
     );
   }
 
+  // Only disable input during actual chat generation, not during background loading
+  const isInputDisabled = chatLoading;
   const isLoading = chatLoading || convLoading || sandboxLoading;
 
   const renderEmptyState = (variant: "default" | "copilot" = "default") => (
@@ -297,7 +299,7 @@ export function LiveChat({
 
         <ChatInput
           onSend={handleSend}
-          disabled={isLoading || quota.used >= quota.limit}
+          disabled={isInputDisabled || quota.used >= quota.limit}
           mode={mode}
         />
       </div>
@@ -652,7 +654,7 @@ export function LiveChat({
                 ))}
               </div>
             )}
-            <CliInput onSend={handleSend} disabled={isLoading || quota.used >= quota.limit} />
+            <CliInput onSend={handleSend} disabled={isInputDisabled || quota.used >= quota.limit} />
             <div ref={messagesEndRef} />
           </div>
           {chatError && (
@@ -990,18 +992,68 @@ function MessageBubble({
   message: ChatMessage;
   compactTools?: boolean;
 }) {
+  // Simple markdown-like rendering for assistant messages
+  const renderContent = (text: string) => {
+    if (!text) return message.isStreaming ? <span className="streaming-dots">●●●</span> : null;
+    
+    // Split by code blocks first
+    const parts = text.split(/(```[\s\S]*?```)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("```") && part.endsWith("```")) {
+        const lines = part.slice(3, -3);
+        const firstNewline = lines.indexOf("\n");
+        const code = firstNewline >= 0 ? lines.slice(firstNewline + 1) : lines;
+        const lang = firstNewline >= 0 ? lines.slice(0, firstNewline).trim() : "";
+        return (
+          <pre key={i} className="bubble-code-block">
+            {lang && <div className="code-lang">{lang}</div>}
+            <code>{code}</code>
+          </pre>
+        );
+      }
+      // Handle inline code
+      const inlineParts = part.split(/(`[^`]+`)/g);
+      return (
+        <span key={i}>
+          {inlineParts.map((ip, j) => {
+            if (ip.startsWith("`") && ip.endsWith("`")) {
+              return <code key={j} className="bubble-inline-code">{ip.slice(1, -1)}</code>;
+            }
+            // Handle **bold**
+            const boldParts = ip.split(/(\*\*[^*]+\*\*)/g);
+            return boldParts.map((bp, k) => {
+              if (bp.startsWith("**") && bp.endsWith("**")) {
+                return <strong key={`${j}-${k}`}>{bp.slice(2, -2)}</strong>;
+              }
+              return bp;
+            });
+          })}
+        </span>
+      );
+    });
+  };
+
   return (
     <div className={`message-bubble ${message.role}`}>
-      <div className="bubble-content">
-        {message.content || (message.isStreaming ? "..." : "")}
+      <div className="bubble-avatar">
+        {message.role === "user" ? "👤" : message.role === "assistant" ? "🤖" : "🔧"}
       </div>
-      {message.toolCalls && message.toolCalls.length > 0 && (
-        <ToolCallDisplay toolCalls={message.toolCalls} compact={compactTools} />
-      )}
+      <div className="bubble-body">
+        <div className="bubble-content">
+          {renderContent(message.content)}
+          {message.isStreaming && message.content && <span className="streaming-cursor">▍</span>}
+        </div>
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <ToolCallDisplay toolCalls={message.toolCalls} compact={compactTools} />
+        )}
+      </div>
       <style jsx>{`
         .message-bubble {
-          max-width: 85%;
+          max-width: 90%;
           animation: fadeIn 0.2s ease-out;
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
         }
 
         @keyframes fadeIn {
@@ -1017,6 +1069,7 @@ function MessageBubble({
 
         .message-bubble.user {
           align-self: flex-end;
+          flex-direction: row-reverse;
         }
 
         .message-bubble.assistant {
@@ -1029,11 +1082,34 @@ function MessageBubble({
           max-width: 100%;
         }
 
+        .bubble-avatar {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+
+        .message-bubble.tool .bubble-avatar {
+          display: none;
+        }
+
+        .bubble-body {
+          flex: 1;
+          min-width: 0;
+        }
+
         .bubble-content {
           padding: 10px 14px;
           border-radius: 16px;
           font-size: 14px;
-          line-height: 1.5;
+          line-height: 1.6;
           white-space: pre-wrap;
           word-break: break-word;
           overflow-wrap: anywhere;
@@ -1054,6 +1130,59 @@ function MessageBubble({
         .message-bubble.tool .bubble-content {
           background: transparent;
           padding: 0;
+        }
+
+        .streaming-cursor {
+          display: inline-block;
+          animation: blink-cursor 0.8s step-end infinite;
+          color: var(--accent);
+          font-weight: bold;
+          margin-left: 1px;
+        }
+
+        @keyframes blink-cursor {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+
+        .streaming-dots {
+          color: var(--text-sec);
+          animation: pulse-dots 1.5s ease-in-out infinite;
+          letter-spacing: 2px;
+        }
+
+        @keyframes pulse-dots {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+
+        .bubble-code-block {
+          margin: 8px 0;
+          padding: 12px;
+          background: rgba(0, 0, 0, 0.06);
+          border-radius: 8px;
+          font-family: var(--font-mono);
+          font-size: 12px;
+          line-height: 1.5;
+          overflow-x: auto;
+          white-space: pre;
+        }
+
+        .code-lang {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-sec);
+          margin-bottom: 6px;
+          font-weight: 600;
+        }
+
+        .bubble-inline-code {
+          padding: 1px 5px;
+          background: rgba(0, 0, 0, 0.06);
+          border-radius: 4px;
+          font-family: var(--font-mono);
+          font-size: 0.9em;
         }
       `}</style>
     </div>

@@ -406,7 +406,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
 
         .live-stage {
           align-items: stretch;
-          grid-template-columns: 1.6fr 1fr 300px;
+          grid-template-columns: 1.8fr 0.8fr 280px;
         }
 
         .live-client-card {
@@ -415,6 +415,14 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           flex-direction: column;
           overflow: hidden;
           min-height: 0;
+        }
+
+        .live-context {
+          max-height: 200px;
+          overflow-y: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-size: 11px;
         }
 
         .token-placeholder {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Conversation } from "~/components/ConversationList";
 
 type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI";
@@ -30,6 +30,10 @@ export function useConversations({
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentConversationRef = useRef<Conversation | null>(null);
+
+  // Keep ref in sync
+  currentConversationRef.current = currentConversation;
 
   const loadConversations = useCallback(async () => {
     setIsLoading(true);
@@ -42,7 +46,8 @@ export function useConversations({
       }
       const data = (await response.json()) as { conversations: Conversation[] };
       setConversations(data.conversations);
-      if (currentConversation && !data.conversations.some((c) => c.id === currentConversation.id)) {
+      const cur = currentConversationRef.current;
+      if (cur && !data.conversations.some((c) => c.id === cur.id)) {
         setCurrentConversation(null);
       }
     } catch (err) {
@@ -50,7 +55,7 @@ export function useConversations({
     } finally {
       setIsLoading(false);
     }
-  }, [mode, currentConversation]);
+  }, [mode]);
 
   const createConversation = useCallback(async (): Promise<Conversation | null> => {
     setIsLoading(true);
