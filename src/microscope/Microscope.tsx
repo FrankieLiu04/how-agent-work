@@ -304,6 +304,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
                   mode={currentMode}
                   isAuthed={props.isAuthed}
                   onProtocolEvent={handleProtocolEvent}
+                  variant="embedded"
                 />
               </div>
             </div>

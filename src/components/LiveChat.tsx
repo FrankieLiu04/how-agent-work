@@ -15,13 +15,16 @@ interface LiveChatProps {
   mode: ChatMode;
   isAuthed: boolean;
   onProtocolEvent?: (event: ProtocolEvent) => void;
+  variant?: "default" | "embedded";
 }
 
 export function LiveChat({
   mode,
   isAuthed,
   onProtocolEvent,
+  variant = "default",
 }: LiveChatProps) {
+  const isEmbedded = variant === "embedded";
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
@@ -241,6 +244,132 @@ export function LiveChat({
   // Only disable input during actual chat generation, not during background loading
   const isInputDisabled = chatLoading;
   const isLoading = chatLoading || convLoading || sandboxLoading;
+
+  if (isEmbedded) {
+    const emptyVariant = mode === "ide" ? "copilot" : "default";
+    return (
+      <div className="live-chat embedded">
+        {renderChatPane({
+          compactTools: true,
+          className: "embedded-chat",
+          emptyVariant,
+        })}
+        <style jsx>{`
+          .live-chat {
+            position: relative;
+            inset: auto;
+            display: flex;
+            height: 100%;
+            width: 100%;
+            padding: 0;
+            overflow: hidden;
+          }
+
+          .live-chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+          }
+
+          .embedded-chat {
+            background: var(--bg);
+            border-radius: 18px;
+            border: 1px solid var(--border);
+          }
+
+          .chat-shell {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+          }
+
+          .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 0;
+          }
+
+          .chat-status {
+            border-top: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.02);
+            padding: 6px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            flex-shrink: 0;
+          }
+
+          .messages-empty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px;
+          }
+
+          .empty-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+          }
+
+          .empty-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+          }
+
+          .empty-hint {
+            font-size: 12px;
+            color: var(--text-sec);
+          }
+
+          .chat-error {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid rgba(255, 59, 48, 0.2);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: var(--error, #ff3b30);
+          }
+
+          .chat-error button {
+            padding: 4px 8px;
+            background: transparent;
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            color: inherit;
+            cursor: pointer;
+            font-size: 11px;
+          }
+
+          .trace-id {
+            font-size: 10px;
+            color: var(--text-sec);
+            font-family: var(--font-mono);
+          }
+
+          .trace-id a {
+            color: var(--accent);
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   const renderEmptyState = (variant: "default" | "copilot" = "default") => (
     <div className="messages-empty">

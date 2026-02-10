@@ -61,6 +61,8 @@ main {
   position: relative;
   overflow: hidden;
   min-height: 0;
+  padding: 10px;
+  display: flex;
 }
 
 .network-stage.highlight {
