@@ -277,6 +277,7 @@ export function useChat({
       const reader = response.body.getReader();
       let fullContent = "";
       let toolCalls: ToolCall[] = [];
+      const toolCallIndexMap = new Map<number, { arrayIndex: number; rawArgs: string }>();
       let currentWorking: WorkingState | undefined;
 
       const updateWorking = (
@@ -321,8 +322,9 @@ export function useChat({
               delta?: {
                 content?: string;
                 tool_calls?: Array<{
-                  id: string;
-                  function: { name: string; arguments: string };
+                  index?: number;
+                  id?: string;
+                  function?: { name?: string; arguments?: string };
                 }>;
               };
               finish_reason?: string | null;
@@ -400,36 +402,47 @@ export function useChat({
             });
           }
 
-          // Handle tool calls
+          // Handle tool calls (streaming: use index to track, accumulate arguments)
           if (delta?.tool_calls) {
             for (const tc of delta.tool_calls) {
-              const existingIndex = toolCalls.findIndex((t) => t.id === tc.id);
-              if (existingIndex >= 0) {
+              const idx = tc.index ?? 0;
+              const existing = toolCallIndexMap.get(idx);
+
+              if (existing != null) {
                 // Append to existing tool call arguments
-                const existing = toolCalls[existingIndex]!;
+                existing.rawArgs += tc.function?.arguments ?? "";
+                if (tc.id && toolCalls[existing.arrayIndex]) {
+                  toolCalls[existing.arrayIndex] = {
+                    ...toolCalls[existing.arrayIndex]!,
+                    id: tc.id,
+                  };
+                }
                 try {
-                  const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
-                  toolCalls[existingIndex] = {
-                    ...existing,
-                    arguments: { ...existing.arguments, ...args },
+                  const args = JSON.parse(existing.rawArgs) as Record<string, unknown>;
+                  toolCalls[existing.arrayIndex] = {
+                    ...toolCalls[existing.arrayIndex]!,
+                    arguments: args,
                   };
                 } catch {
-                  // Arguments might be streamed in chunks
+                  // Arguments still incomplete, will parse when complete
                 }
               } else {
                 // New tool call
+                const rawArgs = tc.function?.arguments ?? "";
                 let args: Record<string, unknown> = {};
                 try {
-                  args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+                  args = JSON.parse(rawArgs) as Record<string, unknown>;
                 } catch {
                   // Arguments might be incomplete
                 }
+                const arrayIndex = toolCalls.length;
                 toolCalls.push({
-                  id: tc.id,
-                  name: tc.function.name,
+                  id: tc.id ?? `pending_${idx}`,
+                  name: tc.function?.name ?? "unknown",
                   arguments: args,
                   status: "pending",
                 });
+                toolCallIndexMap.set(idx, { arrayIndex, rawArgs });
               }
             }
             

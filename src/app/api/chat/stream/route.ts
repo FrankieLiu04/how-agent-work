@@ -17,7 +17,7 @@ import { executeTavilySearch, formatTavilyResults } from "~/lib/tools/tavily";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system" | string;
-  content?: string;
+  content?: string | null;
   tool_calls?: unknown;
   tool_call_id?: string;
 };
@@ -40,7 +40,8 @@ type StreamChunk = {
     delta?: {
       content?: string;
       tool_calls?: Array<{
-        id: string;
+        index: number;
+        id?: string;
         function?: { name?: string; arguments?: string };
       }>;
     };
@@ -127,20 +128,22 @@ type AccumulatedToolCall = {
 };
 
 function appendToolCallDelta(
-  toolCalls: Map<string, AccumulatedToolCall>,
-  delta: { id: string; function?: { name?: string; arguments?: string } }
+  toolCalls: Map<number, AccumulatedToolCall>,
+  delta: { index: number; id?: string; function?: { name?: string; arguments?: string } }
 ): void {
-  const existing = toolCalls.get(delta.id);
+  const existing = toolCalls.get(delta.index);
   const nextArgs = delta.function?.arguments ?? "";
   if (existing) {
-    toolCalls.set(delta.id, {
+    toolCalls.set(delta.index, {
       ...existing,
+      id: delta.id ?? existing.id,
+      name: delta.function?.name ?? existing.name,
       argumentsText: existing.argumentsText + nextArgs,
     });
     return;
   }
-  toolCalls.set(delta.id, {
-    id: delta.id,
+  toolCalls.set(delta.index, {
+    id: delta.id ?? `call_${Date.now()}_${delta.index}`,
     name: delta.function?.name ?? "unknown",
     argumentsText: nextArgs,
   });
@@ -386,7 +389,8 @@ export async function POST(request: Request): Promise<Response> {
               const reader = upstream.body.getReader();
               let buffer = "";
               let sawToolFinish = false;
-              const toolCalls = new Map<string, AccumulatedToolCall>();
+              const toolCalls = new Map<number, AccumulatedToolCall>();
+              let assistantContent = "";
 
               while (true) {
                 const { value, done } = await reader.read();
@@ -413,6 +417,10 @@ export async function POST(request: Request): Promise<Response> {
 
                   const choice = parsed?.choices?.[0];
                   const delta = choice?.delta;
+
+                  if (delta?.content) {
+                    assistantContent += delta.content;
+                  }
 
                   if (delta?.content && workingActive && !workingDoneSent) {
                     writeData(
@@ -481,6 +489,7 @@ export async function POST(request: Request): Promise<Response> {
                 ...currentMessages,
                 {
                   role: "assistant",
+                  content: assistantContent || null,
                   tool_calls: limitedToolCalls.map((toolCall) => ({
                     id: toolCall.id,
                     type: "function",
