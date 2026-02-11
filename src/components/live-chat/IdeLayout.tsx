@@ -36,6 +36,7 @@ interface IdeLayoutProps {
   files: SandboxFile[];
   limits: SandboxLimits | null;
   selectedPath: string | null;
+  openedPath: string | null;
   selectedContent: string;
   onFileSelect: (path: string) => void;
   onDeleteFile: (path: string) => void;
@@ -63,6 +64,7 @@ export function IdeLayout({
   files,
   limits,
   selectedPath,
+  openedPath,
   selectedContent,
   onFileSelect,
   onDeleteFile,
@@ -80,7 +82,7 @@ export function IdeLayout({
       />
 
       <IdeEditorPane
-        selectedPath={selectedPath}
+        selectedPath={openedPath}
         selectedContent={selectedContent}
         disabled={isLoading}
         onSaveFile={onSaveFile}

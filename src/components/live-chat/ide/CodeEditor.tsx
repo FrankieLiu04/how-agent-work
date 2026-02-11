@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -119,6 +119,22 @@ export function CodeEditor({
 
   const languageKind = useMemo(() => languageForPath(path), [path]);
 
+  const buildConfigExtensions = (nextDisabled: boolean) => [
+    EditorState.readOnly.of(nextDisabled),
+    EditorView.editable.of(!nextDisabled),
+    onSave
+      ? keymap.of([
+          {
+            key: "Mod-s",
+            run: () => {
+              onSave();
+              return true;
+            },
+          },
+        ])
+      : [],
+  ];
+
   const baseExtensions = useMemo(
     () => [
       lineNumbers(),
@@ -133,13 +149,13 @@ export function CodeEditor({
         if (!update.docChanged) return;
         onChange(update.state.doc.toString());
       }),
-      configCompartmentRef.current.of([]),
-      languageCompartmentRef.current.of([]),
+      configCompartmentRef.current.of(buildConfigExtensions(disabled)),
+      languageCompartmentRef.current.of(languageExtension(languageKind)),
     ],
-    [onChange]
+    [disabled, languageKind, onChange]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     if (viewRef.current) return;
@@ -155,7 +171,7 @@ export function CodeEditor({
       viewRef.current?.destroy();
       viewRef.current = null;
     };
-  }, [baseExtensions, value]);
+  }, [baseExtensions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const view = viewRef.current;
@@ -167,31 +183,15 @@ export function CodeEditor({
     });
   }, [value]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    const configExtensions = [
-      EditorState.readOnly.of(disabled),
-      EditorView.editable.of(!disabled),
-      onSave
-        ? keymap.of([
-            {
-              key: "Mod-s",
-              run: () => {
-                onSave();
-                return true;
-              },
-            },
-          ])
-        : [],
-    ];
-
     view.dispatch({
-      effects: configCompartmentRef.current.reconfigure(configExtensions),
+      effects: configCompartmentRef.current.reconfigure(buildConfigExtensions(disabled)),
     });
   }, [disabled, onSave]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({

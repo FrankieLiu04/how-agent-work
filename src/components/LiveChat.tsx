@@ -24,6 +24,7 @@ export function LiveChat({
   const STORAGE_KEY = "livechat:lastConversationByMode";
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [openedPath, setOpenedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
   const [lastConversationByMode, setLastConversationByMode] = useState<
     Record<ChatMode, string | null>
@@ -110,6 +111,7 @@ export function LiveChat({
           const refreshed = await readFile(path);
           if (mode === "ide") {
             setSelectedPath(path);
+            setOpenedPath(path);
             setSelectedContent(refreshed ?? content);
           }
           return { success: true, path, bytes: result.file.size };
@@ -300,18 +302,20 @@ export function LiveChat({
       const result = await writeFile(path, content);
       if (!result.ok) return;
       const refreshed = await readFile(result.file.path ?? path);
-      if (path === selectedPath) {
+      if (path === openedPath) {
         setSelectedContent(refreshed ?? "");
       }
     },
-    [readFile, writeFile, selectedPath]
+    [readFile, writeFile, openedPath]
   );
 
   const handleFileSelect = useCallback(
     async (path: string) => {
       if (!path) return;
       setSelectedPath(path);
+      setSelectedContent("");
       const content = await readFile(path);
+      setOpenedPath(path);
       setSelectedContent(content ?? "");
     },
     [readFile]
@@ -366,6 +370,7 @@ export function LiveChat({
         files={files}
         limits={limits}
         selectedPath={selectedPath}
+        openedPath={openedPath}
         selectedContent={selectedContent}
         onFileSelect={handleFileSelect}
         onDeleteFile={deleteFile}
