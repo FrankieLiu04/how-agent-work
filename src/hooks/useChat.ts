@@ -81,6 +81,28 @@ function generateId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function getToolOutcome(result: unknown): { ok: boolean; error?: string; warning?: string } {
+  if (!result || typeof result !== "object") return { ok: true };
+  const r = result as Record<string, unknown>;
+
+  const warning = typeof r.warning === "string" ? r.warning : undefined;
+
+  if (r.success === false) {
+    const error =
+      (typeof r.message === "string" ? r.message : undefined) ??
+      (typeof r.error === "string" ? r.error : undefined) ??
+      "Tool failed";
+    return { ok: false, error, warning };
+  }
+
+  if (typeof r.error === "string") {
+    const error = (typeof r.message === "string" ? r.message : undefined) ?? r.error;
+    return { ok: false, error, warning };
+  }
+
+  return { ok: true, warning };
+}
+
 export function useChat({
   mode,
   conversationId,
@@ -379,16 +401,19 @@ export function useChat({
 
             if (parsed.type === "tool_result" && parsed.tool_call_id) {
               const resultContent = stringifyToolResult(parsed.result);
+              const outcome = getToolOutcome(parsed.result);
 
-              const updated = toolCalls.map((tc) =>
-                tc.id === parsed.tool_call_id
-                  ? {
-                      ...tc,
-                      status: "completed" as const,
-                      result: { success: true, data: parsed.result },
-                    }
-                  : tc
-              );
+              const updated: ToolCall[] = toolCalls.map((tc): ToolCall => {
+                if (tc.id !== parsed.tool_call_id) return tc;
+                const status: ToolCall["status"] = outcome.ok ? "completed" : "error";
+                return {
+                  ...tc,
+                  status,
+                  result: outcome.ok
+                    ? { success: true, data: parsed.result }
+                    : { success: false, data: parsed.result, error: outcome.error },
+                };
+              });
               toolCalls = updated;
 
               guardedSetMessages((prev) => [
@@ -570,8 +595,11 @@ export function useChat({
           let toolResult: unknown;
           try {
             toolResult = await onToolCall(tc);
-            tc.status = "completed";
-            tc.result = { success: true, data: toolResult };
+            const outcome = getToolOutcome(toolResult);
+            tc.status = outcome.ok ? "completed" : "error";
+            tc.result = outcome.ok
+              ? { success: true, data: toolResult }
+              : { success: false, data: toolResult, error: outcome.error };
           } catch (err) {
             tc.status = "error";
             tc.result = { success: false, error: String(err) };

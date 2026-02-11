@@ -105,8 +105,29 @@ export function LiveChat({
           if (!rawPath.trim()) return { error: "Missing path" };
           const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
           const content = String(args.content ?? "");
+          const maxBytes = limits?.maxFileSize ?? null;
+          const actualBytes = new TextEncoder().encode(content).length;
+          if (maxBytes != null && actualBytes > maxBytes) {
+            return {
+              success: false,
+              error: "file_too_large",
+              maxBytes,
+              actualBytes,
+              message: `文件内容超过单文件大小限制（${Math.floor(maxBytes / 1024)}KB）`,
+              hint: "请只写必要代码（去掉题目与长解释/注释），或拆分为多个更小的文件。",
+            };
+          }
+
           const result = await writeFile(path, content);
-          if (!result.ok) return { error: result.error };
+          if (!result.ok) {
+            return {
+              success: false,
+              error: result.code ?? "write_failed",
+              httpStatus: result.httpStatus ?? null,
+              message: result.error,
+              hint: result.httpStatus === 401 ? "请先完成登录/鉴权后再写入文件。" : undefined,
+            };
+          }
 
           const refreshed = await readFile(path);
           if (mode === "ide") {
@@ -114,7 +135,13 @@ export function LiveChat({
             setOpenedPath(path);
             setSelectedContent(refreshed ?? content);
           }
-          return { success: true, path, bytes: result.file.size };
+          return {
+            success: true,
+            path,
+            bytes: result.file.size,
+            refreshed: result.refreshed,
+            warning: result.warning,
+          };
         }
         case "list_files": {
           const rawPath = String(args.path ?? "/");
@@ -184,7 +211,7 @@ export function LiveChat({
           return { error: `Unknown tool: ${toolCall.name}` };
       }
     },
-    [files, readFile, writeFile, deleteFile, execCommand, mode]
+    [files, limits?.maxFileSize, readFile, writeFile, deleteFile, execCommand, mode]
   );
 
   const {

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { TerminalLine } from "~/components/TerminalView";
+import { parseErrorResponse } from "~/lib/http/parseErrorResponse";
 
 export interface SandboxFile {
   id?: string;
@@ -14,8 +15,8 @@ export interface SandboxFile {
 }
 
 export type SandboxWriteResult =
-  | { ok: true; file: SandboxFile }
-  | { ok: false; error: string };
+  | { ok: true; file: SandboxFile; refreshed: boolean; warning?: string }
+  | { ok: false; error: string; code?: string; httpStatus?: number };
 
 interface SandboxLimits {
   maxFiles: number;
@@ -77,14 +78,17 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     setTerminalLines([]);
   }, []);
 
-  const loadFiles = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const loadFilesImpl = useCallback(async ({ silent }: { silent: boolean }) => {
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       const response = await fetch("/api/sandbox/files");
       if (!response.ok) {
-        throw new Error(`Failed to load files: ${response.status}`);
+        const parsed = await parseErrorResponse(response);
+        throw new Error(parsed.message);
       }
       const data = (await response.json()) as {
         files: SandboxFile[];
@@ -94,11 +98,20 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       setLimits(data.limits);
       setInitialized(data.files.length > 0);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load files");
+      if (!silent) {
+        setError(err instanceof Error ? err.message : "Failed to load files");
+      }
+      throw err;
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
+
+  const loadFiles = useCallback(async () => {
+    await loadFilesImpl({ silent: false });
+  }, [loadFilesImpl]);
 
   const readFile = useCallback(async (path: string): Promise<string | null> => {
     try {
@@ -123,21 +136,42 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       });
 
       if (!response.ok) {
-        const errorData = (await response.json()) as { error?: string; message?: string };
-        throw new Error(errorData.message ?? errorData.error ?? "Failed to write file");
+        const errorData = await parseErrorResponse(response);
+        return {
+          ok: false,
+          error: errorData.message,
+          code: errorData.code,
+          httpStatus: errorData.httpStatus,
+        };
       }
 
       const file = (await response.json()) as SandboxFile;
 
-      // Reload files to get updated list
-      await loadFiles();
-      return { ok: true, file };
+      setFiles((prev) => {
+        const existingIndex = prev.findIndex((f) => f.path === file.path);
+        if (existingIndex === -1) return [...prev, file].sort((a, b) => a.path.localeCompare(b.path));
+
+        const next = [...prev];
+        next[existingIndex] = { ...prev[existingIndex], ...file };
+        return next;
+      });
+
+      let refreshed = true;
+      let warning: string | undefined;
+      try {
+        await loadFilesImpl({ silent: true });
+      } catch (err) {
+        refreshed = false;
+        warning = err instanceof Error ? err.message : "Failed to refresh file list";
+      }
+
+      return warning ? { ok: true, file, refreshed, warning } : { ok: true, file, refreshed };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to write file";
       setError(message);
       return { ok: false, error: message };
     }
-  }, [loadFiles]);
+  }, [loadFilesImpl]);
 
   const deleteFile = useCallback(async (path: string): Promise<boolean> => {
     setError(null);
@@ -148,8 +182,8 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       });
 
       if (!response.ok) {
-        const errorData = (await response.json()) as { error?: string; message?: string };
-        throw new Error(errorData.message ?? errorData.error ?? "Failed to delete file");
+        const errorData = await parseErrorResponse(response);
+        throw new Error(errorData.message);
       }
 
       // Reload files
@@ -175,8 +209,8 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       });
 
       if (!response.ok) {
-        const errorData = (await response.json()) as { error?: string };
-        const errorMsg = errorData.error ?? `Command failed: ${response.status}`;
+        const errorData = await parseErrorResponse(response);
+        const errorMsg = errorData.message ?? `Command failed: ${response.status}`;
         addTerminalLine("error", errorMsg);
         return { stdout: "", stderr: errorMsg, exitCode: 1 };
       }
@@ -232,7 +266,8 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to initialize sandbox: ${response.status}`);
+        const errorData = await parseErrorResponse(response);
+        throw new Error(errorData.message);
       }
 
       const data = (await response.json()) as { initialized: boolean; files: SandboxFile[] };

@@ -34,7 +34,19 @@ function ToolCallItem({ call, compact }: { call: ToolCall; compact?: boolean }) 
   const [expanded, setExpanded] = useState(false);
   const config = TOOL_CONFIG[call.name] ?? { icon: "🔧", color: "#8e8e93", label: call.name };
 
+  const hasWarning =
+    !!call.result &&
+    call.result.success === true &&
+    !!call.result.data &&
+    typeof call.result.data === "object" &&
+    !Array.isArray(call.result.data) &&
+    typeof (call.result.data as Record<string, unknown>).warning === "string";
+
+  const isError = call.status === "error" || call.result?.success === false || !!call.result?.error;
+
   const getStatusIcon = () => {
+    if (isError) return "❌";
+    if (hasWarning) return "⚠️";
     switch (call.status) {
       case "pending":
         return "⏳";
@@ -119,7 +131,7 @@ function ToolCallItem({ call, compact }: { call: ToolCall; compact?: boolean }) 
   }
 
   return (
-    <div className={`tool-call ${call.status}`}>
+    <div className={`tool-call ${isError ? "error" : call.status}`}>
       <div className="tool-header" onClick={() => setExpanded(!expanded)}>
         <span className="tool-icon">{config.icon}</span>
         <span className="tool-label" style={{ color: config.color }}>{config.label}</span>
