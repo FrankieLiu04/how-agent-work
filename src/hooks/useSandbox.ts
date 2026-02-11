@@ -9,7 +9,13 @@ export interface SandboxFile {
   content?: string;
   isDir: boolean;
   size: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+export type SandboxWriteResult =
+  | { ok: true; file: SandboxFile }
+  | { ok: false; error: string };
 
 interface SandboxLimits {
   maxFiles: number;
@@ -35,7 +41,7 @@ interface UseSandboxReturn {
   // File operations
   loadFiles: () => Promise<void>;
   readFile: (path: string) => Promise<string | null>;
-  writeFile: (path: string, content: string) => Promise<boolean>;
+  writeFile: (path: string, content: string) => Promise<SandboxWriteResult>;
   deleteFile: (path: string) => Promise<boolean>;
   
   // Shell operations
@@ -106,7 +112,7 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     }
   }, []);
 
-  const writeFile = useCallback(async (path: string, content: string): Promise<boolean> => {
+  const writeFile = useCallback(async (path: string, content: string): Promise<SandboxWriteResult> => {
     setError(null);
 
     try {
@@ -121,12 +127,15 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
         throw new Error(errorData.message ?? errorData.error ?? "Failed to write file");
       }
 
+      const file = (await response.json()) as SandboxFile;
+
       // Reload files to get updated list
       await loadFiles();
-      return true;
+      return { ok: true, file };
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to write file");
-      return false;
+      const message = err instanceof Error ? err.message : "Failed to write file";
+      setError(message);
+      return { ok: false, error: message };
     }
   }, [loadFiles]);
 
@@ -241,17 +250,17 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     }
   }, [addTerminalLine, loadFiles]);
 
-  // Auto-init on mount
   useEffect(() => {
-    if (autoInit) {
-      void loadFiles().then(() => {
-        // Check if we need to initialize
-        if (files.length === 0) {
-          void initSandbox();
-        }
-      });
-    }
-  }, [autoInit]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!autoInit) return;
+    void loadFiles();
+  }, [autoInit, loadFiles]);
+
+  useEffect(() => {
+    if (!autoInit) return;
+    if (initialized) return;
+    if (files.length !== 0) return;
+    void initSandbox();
+  }, [autoInit, files.length, initSandbox, initialized]);
 
   return {
     files,

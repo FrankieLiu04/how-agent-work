@@ -85,24 +85,51 @@ export function LiveChat({
           return { status: "search_executed" };
         }
         case "read_file": {
-          const path = args.path as string;
+          const rawPath = String(args.path ?? "");
+          if (!rawPath.trim()) return { error: "Missing path" };
+          const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
           const content = await readFile(path);
-          return content != null ? { content } : { error: "File not found" };
+          if (content == null) return { error: "File not found" };
+          if (content.length > 2000) {
+            return {
+              content: content.slice(0, 2000),
+              truncated: true,
+              totalChars: content.length,
+            };
+          }
+          return { content };
         }
         case "write_file": {
-          const path = args.path as string;
-          const content = args.content as string;
-          const success = await writeFile(path, content);
-          return success ? { success: true } : { error: "Write failed" };
+          const rawPath = String(args.path ?? "");
+          if (!rawPath.trim()) return { error: "Missing path" };
+          const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+          const content = String(args.content ?? "");
+          const result = await writeFile(path, content);
+          if (!result.ok) return { error: result.error };
+
+          const refreshed = await readFile(path);
+          if (mode === "ide") {
+            setSelectedPath(path);
+            setSelectedContent(refreshed ?? content);
+          }
+          return { success: true, path, bytes: result.file.size };
         }
         case "list_files": {
-          const path = (args.path as string) ?? "/";
+          const rawPath = String(args.path ?? "/");
+          const path = rawPath.trim() ? (rawPath.startsWith("/") ? rawPath : `/${rawPath}`) : "/";
           const dirFiles = files.filter((f) => {
             const parent = f.path.substring(0, f.path.lastIndexOf("/")) || "/";
             return parent === path;
           });
+          const sorted = [...dirFiles].sort((a, b) => {
+            if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+            return a.path.localeCompare(b.path);
+          });
+          const limited = sorted.slice(0, 50);
           return {
-            files: dirFiles.map((f) => ({ path: f.path, isDir: f.isDir, size: f.size })),
+            files: limited.map((f) => ({ path: f.path, isDir: f.isDir, size: f.size })),
+            total: sorted.length,
+            truncated: sorted.length > limited.length,
           };
         }
         case "delete_file": {
@@ -155,7 +182,7 @@ export function LiveChat({
           return { error: `Unknown tool: ${toolCall.name}` };
       }
     },
-    [files, readFile, writeFile, deleteFile, execCommand]
+    [files, readFile, writeFile, deleteFile, execCommand, mode]
   );
 
   const {
@@ -270,9 +297,9 @@ export function LiveChat({
   const handleSaveFile = useCallback(
     async (path: string, content: string) => {
       if (!path) return;
-      const success = await writeFile(path, content);
-      if (!success) return;
-      const refreshed = await readFile(path);
+      const result = await writeFile(path, content);
+      if (!result.ok) return;
+      const refreshed = await readFile(result.file.path ?? path);
       if (path === selectedPath) {
         setSelectedContent(refreshed ?? "");
       }

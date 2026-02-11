@@ -5,6 +5,7 @@ import { QuotaIndicator } from "~/components/QuotaIndicator";
 import { type Conversation } from "~/components/ConversationList";
 import { type ChatMessage, type ChatMode } from "~/hooks/useChat";
 import { ChatPane } from "~/components/live-chat/ChatPane";
+import { MessageBubble } from "~/components/live-chat/MessageBubble";
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr);
@@ -59,7 +60,7 @@ export function IdeCopilotPane({
   onDismissError: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
 }) {
-  const [view, setView] = useState<"history" | "chat">(currentId ? "chat" : "history");
+  const [view, setView] = useState<"history" | "chat" | "tools">(currentId ? "chat" : "history");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,6 +68,8 @@ export function IdeCopilotPane({
       setView("history");
     }
   }, [currentId]);
+
+  const toolMessages = messages.filter((m) => m.role === "tool");
 
   const currentConversation = currentId
     ? conversations.find((c) => c.id === currentId) ?? null
@@ -78,20 +81,30 @@ export function IdeCopilotPane({
     <div className="live-chat__ide-copilot">
       <div className="live-chat__ide-copilot-header">
         <div className="live-chat__ide-copilot-left">
-          {view === "chat" && (
+          {view !== "history" && (
             <button
               className="live-chat__button live-chat__button--secondary"
               disabled={isLoading}
-              onClick={() => setView("history")}
+              onClick={() => setView(view === "tools" ? "chat" : "history")}
             >
               Back
             </button>
           )}
           <div className="live-chat__ide-copilot-title">
-            {view === "chat" ? title : "History"}
+            {view === "chat" ? title : view === "tools" ? "Tool Log" : "History"}
           </div>
         </div>
         <div className="live-chat__ide-copilot-actions">
+          {view === "chat" && toolMessages.length > 0 && (
+            <button
+              className="live-chat__button live-chat__button--secondary"
+              disabled={isLoading}
+              onClick={() => setView("tools")}
+              title="Show tool messages"
+            >
+              Tool Log
+            </button>
+          )}
           <button
             className="live-chat__button"
             disabled={isLoading}
@@ -157,6 +170,15 @@ export function IdeCopilotPane({
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        ) : view === "tools" ? (
+          <div className="live-chat__ide-tool-log" role="log" aria-live="polite">
+            {toolMessages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} mode={mode} compactTools />
+            ))}
+            {toolMessages.length === 0 && (
+              <div className="live-chat__ide-history-empty">No tool messages</div>
             )}
           </div>
         ) : (

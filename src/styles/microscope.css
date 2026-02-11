@@ -1258,6 +1258,16 @@ main {
   gap: 10px;
 }
 
+.live-chat__ide-tool-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .live-chat__ide-history-empty {
   color: var(--text-sec);
   font-size: 12px;

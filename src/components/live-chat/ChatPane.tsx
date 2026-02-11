@@ -36,6 +36,11 @@ export function ChatPane({
   className,
   emptyVariant = "default",
 }: ChatPaneProps) {
+  const visibleMessages =
+    mode === "agent" || mode === "ide" || mode === "cli"
+      ? messages.filter((msg) => msg.role !== "tool")
+      : messages;
+
   const renderEmptyState = () => (
     <div className="live-chat__empty">
       <div className="live-chat__empty-icon">
@@ -65,9 +70,9 @@ export function ChatPane({
     <div className={`live-chat__main ${className ?? ""}`.trim()}>
       <div className="live-chat__shell">
         <div className="live-chat__messages" role="log" aria-live="polite">
-          {messages.length === 0
+          {visibleMessages.length === 0
             ? renderEmptyState()
-            : (mode === "agent" ? messages.filter((msg) => msg.role !== "tool") : messages).map((msg) => (
+            : visibleMessages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
                   message={msg}
