@@ -673,8 +673,16 @@ main {
   display: none;
 }
 
-main.live-stage--wide-client {
+.live-stage {
+  grid-template-columns: 1.8fr 0.8fr 280px;
+}
+
+.live-stage.live-stage--wide-client {
   grid-template-columns: 1.6fr 1.05fr 0.9fr;
+}
+
+.live-stage.live-stage--mode-ide {
+  grid-template-columns: 2.3fr 0.75fr clamp(200px, 16vw, 260px);
 }
 
 /* Live chat layout */
@@ -1077,7 +1085,7 @@ main.live-stage--wide-client {
 }
 
 .live-chat__files {
-  width: 240px;
+  width: clamp(200px, 16vw, 240px);
   display: flex;
   flex-direction: column;
   background: #1b1b1d;
@@ -1182,7 +1190,7 @@ main.live-stage--wide-client {
 }
 
 .live-chat__ide-copilot {
-  width: 380px;
+  width: clamp(280px, 22vw, 340px);
   display: flex;
   flex-direction: column;
   background: var(--card-bg);
