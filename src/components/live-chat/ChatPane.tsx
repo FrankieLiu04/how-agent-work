@@ -4,6 +4,7 @@ import { type RefObject } from "react";
 import { ChatInput } from "~/components/ChatInput";
 import { type ChatMessage, type ChatMode } from "~/hooks/useChat";
 import { MessageBubble } from "~/components/live-chat/MessageBubble";
+import { ToolRoundBubble } from "~/components/live-chat/ToolRoundBubble";
 
 interface ChatPaneProps {
   mode: ChatMode;
@@ -36,10 +37,54 @@ export function ChatPane({
   className,
   emptyVariant = "default",
 }: ChatPaneProps) {
-  const visibleMessages =
-    mode === "agent" || mode === "ide" || mode === "cli"
-      ? messages.filter((msg) => msg.role !== "tool")
-      : messages;
+  const buildDisplayItems = () => {
+    if (mode === "chat") {
+      return messages.map((m) => ({ kind: "message" as const, key: m.id, message: m }));
+    }
+
+    const items: Array<
+      | { kind: "message"; key: string; message: ChatMessage }
+      | { kind: "tool_round"; key: string; pre: ChatMessage; toolMessages: ChatMessage[]; post?: ChatMessage }
+    > = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m) continue;
+
+      if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+        const toolMessages: ChatMessage[] = [];
+        let j = i + 1;
+        while (j < messages.length && messages[j]?.role === "tool") {
+          toolMessages.push(messages[j]!);
+          j++;
+        }
+
+        if (toolMessages.length > 0) {
+          const post = j < messages.length && messages[j]?.role === "assistant" ? messages[j] : undefined;
+          items.push({
+            kind: "tool_round",
+            key: `${m.id}:${post?.id ?? "pending"}`,
+            pre: m,
+            toolMessages,
+            post,
+          });
+          i = post ? j : j - 1;
+          continue;
+        }
+      }
+
+      if (m.role === "tool") {
+        continue;
+      }
+
+      items.push({ kind: "message", key: m.id, message: m });
+    }
+
+    return items;
+  };
+
+  const displayItems = buildDisplayItems();
+  const visibleCount = displayItems.length;
 
   const renderEmptyState = () => (
     <div className="live-chat__empty">
@@ -70,16 +115,27 @@ export function ChatPane({
     <div className={`live-chat__main ${className ?? ""}`.trim()}>
       <div className="live-chat__shell">
         <div className="live-chat__messages" role="log" aria-live="polite">
-          {visibleMessages.length === 0
+          {visibleCount === 0
             ? renderEmptyState()
-            : visibleMessages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  compactTools={compactTools}
-                  mode={mode}
-                />
-              ))}
+            : displayItems.map((item) =>
+                item.kind === "tool_round" ? (
+                  <ToolRoundBubble
+                    key={item.key}
+                    mode={mode}
+                    pre={item.pre}
+                    toolMessages={item.toolMessages}
+                    post={item.post}
+                    compactTools={compactTools}
+                  />
+                ) : (
+                  <MessageBubble
+                    key={item.key}
+                    message={item.message}
+                    compactTools={compactTools}
+                    mode={mode}
+                  />
+                )
+              )}
           <div ref={messagesEndRef} />
         </div>
 
