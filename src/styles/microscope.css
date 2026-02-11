@@ -1146,6 +1146,11 @@ main {
   min-height: 0;
 }
 
+.live-chat__editor-cm {
+  flex: 1;
+  min-height: 0;
+}
+
 .live-chat__editor-tabs {
   height: 34px;
   display: flex;
@@ -1749,6 +1754,22 @@ footer {
   --btn-secondary-border: rgba(0, 0, 0, 0.08);
   --btn-secondary-text: var(--text-sec);
   --tool-result-bg: rgba(0, 0, 0, 0.03);
+  --cm-bg: var(--ide-editor-bg);
+  --cm-fg: var(--ide-text);
+  --cm-border: var(--ide-border);
+  --cm-selection: rgba(10, 132, 255, 0.18);
+  --cm-cursor: var(--ide-text);
+  --cm-gutter-bg: var(--ide-surface-2);
+  --cm-gutter-fg: var(--ide-text-muted);
+  --cm-active-line-bg: rgba(0, 0, 0, 0.03);
+  --cm-keyword: var(--purple);
+  --cm-string: var(--success);
+  --cm-number: var(--orange);
+  --cm-comment: var(--text-sec);
+  --cm-operator: var(--text);
+  --cm-function: var(--accent);
+  --cm-variable: var(--text);
+  --cm-type: var(--accent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1784,6 +1805,22 @@ footer {
     --btn-secondary-border: rgba(255, 255, 255, 0.12);
     --btn-secondary-text: rgba(255, 255, 255, 0.75);
     --tool-result-bg: rgba(255, 255, 255, 0.06);
+    --cm-bg: var(--ide-editor-bg);
+    --cm-fg: var(--ide-text);
+    --cm-border: var(--ide-border);
+    --cm-selection: rgba(10, 132, 255, 0.22);
+    --cm-cursor: rgba(255, 255, 255, 0.9);
+    --cm-gutter-bg: var(--ide-surface-2);
+    --cm-gutter-fg: var(--ide-text-muted);
+    --cm-active-line-bg: rgba(255, 255, 255, 0.04);
+    --cm-keyword: #c586c0;
+    --cm-string: #ce9178;
+    --cm-number: #b5cea8;
+    --cm-comment: rgba(255, 255, 255, 0.5);
+    --cm-operator: rgba(255, 255, 255, 0.8);
+    --cm-function: #dcdcaa;
+    --cm-variable: rgba(255, 255, 255, 0.85);
+    --cm-type: #4ec9b0;
   }
 
   .zone-header {

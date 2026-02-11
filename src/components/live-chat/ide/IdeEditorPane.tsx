@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CodeEditor } from "~/components/live-chat/ide/CodeEditor";
 
 export function IdeEditorPane({
   selectedPath,
@@ -51,11 +52,16 @@ export function IdeEditorPane({
         </div>
       </div>
       {selectedPath ? (
-        <textarea
-          className="live-chat__editor-content"
+        <CodeEditor
+          path={selectedPath}
           value={draftContent}
-          onChange={(e) => setDraftContent(e.target.value)}
-          spellCheck={false}
+          disabled={disabled}
+          onChange={setDraftContent}
+          onSave={() => {
+            if (!selectedPath) return;
+            if (!isDirty) return;
+            void onSaveFile(selectedPath, draftContent);
+          }}
         />
       ) : (
         <pre className="live-chat__editor-content">Select a file to view its contents.</pre>
