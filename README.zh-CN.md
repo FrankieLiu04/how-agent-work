@@ -31,8 +31,8 @@
 ### 🛡️ 后端与基础设施
 - **混合流式引擎**:
   - **Mock 模式**: 零延迟模拟，用于 UI 测试和演示（默认开启）。
-  - **Live 模式**: 实时透传 OpenAI API 响应（需要登录）。
-- **健壮的速率限制**: 基于令牌桶算法实现严格的配额管理（例如：每用户每小时 5 次请求），防止滥用。
+  - **Live 模式**: 实时代理 OpenAI 兼容接口（需要登录）。
+- **健壮的速率限制**: 基于令牌桶算法实现严格的配额管理（默认：每用户每小时 60 次请求），防止滥用。
 - **可观测性**:
   - **Metrics**: 实时请求计数器和延迟直方图，暴露于 `/api/metrics`。
   - **Tracing**: 详细的请求级链路追踪，用于调试复杂的 Agent 流程，暴露于 `/api/debug/traces`。
@@ -45,8 +45,8 @@
 2.  **网关 (Gateway)**: Next.js API 路由通过 NextAuth 验证请求，并检查 PostgreSQL 中的速率限制。
 3.  **引擎 (Engine)**:
     *   **Mock**: 基于预定义场景生成合成 Token。
-    *   **Live**: 代理请求至 OpenAI，处理流式转换和背压 (Backpressure)。
-4.  **可观测性 (Observability)**: 异步记录指标和追踪数据到数据库，确保对用户请求延迟的最小化影响。
+    *   **Live**: 代理请求至 OpenAI 兼容提供方（默认 base URL 指向 DeepSeek），处理流式转换和背压 (Backpressure)。
+4.  **可观测性 (Observability)**: 将指标与追踪写入进程内内存存储，并通过 `/api/metrics` 与 `/api/debug/traces` 导出。
 
 ## 🚀 快速开始
 
@@ -96,13 +96,17 @@
 | `AUTH_SECRET` | NextAuth 密钥 (可用 `openssl rand -base64 32` 生成) | 是 |
 | `AUTH_GITHUB_ID` | GitHub OAuth Client ID | 是 |
 | `AUTH_GITHUB_SECRET` | GitHub OAuth Client Secret | 是 |
-| `OPENAI_API_KEY` | OpenAI API Key (用于 Live 模式) | 否 |
-| `OPENAI_BASE_URL` | 自定义 OpenAI 兼容网关地址 | 否 |
+| `AUTH_URL` | NextAuth 基础 URL（建议用于 Vercel/自定义域名） | 否 |
+| `AUTH_TRUST_HOST` | 是否信任代理头（Vercel 建议开启） | 否 |
+| `OPENAI_API_KEY` | Live 模式使用的 API Key（OpenAI 兼容） | 否 |
+| `OPENAI_BASE_URL` | 自定义 OpenAI 兼容 Base URL | 否 |
+| `TAVILY_API_KEY` | 启用联网检索工具（Agent） | 否 |
 
 ## 📚 文档
 
-- **部署指南**: [DEPLOY_PUBLIC.md](docs/DEPLOY_PUBLIC.md)
-- **项目边界**: [VIBE_BOUNDARIES.md](docs/VIBE_BOUNDARIES.md)
+- **项目结构与架构说明**: [PROJECT.md](PROJECT.md)
+- **部署/排障备忘**: [AGENT.md](AGENT.md)
+- **环境变量示例**: [.env.example](.env.example)
 
 ## 🛠 开发命令
 

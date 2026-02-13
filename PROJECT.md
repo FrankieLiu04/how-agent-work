@@ -35,25 +35,32 @@ src/
     TerminalView.tsx        # 终端视图
     ToolCallDisplay.tsx     # 工具调用 UI
     live-chat/
+      ide/                  # IDE 编辑器（CodeMirror）相关
       ChatLayout.tsx        # Chat/Agent 布局
       IdeLayout.tsx         # IDE 布局
       CliLayout.tsx         # CLI 布局
       ChatPane.tsx          # 消息与输入 UI
       CliInput.tsx          # CLI 输入
       MessageBubble.tsx     # 消息渲染（支持工具/Working 状态）
+    ui/                     # 通用 UI（空态/错误边界/加载态）
   hooks/
-    useChat.ts              # SSE 消息流解析 + 消息持久化
+    useChat.ts              # useChat 入口（re-export）
+    useChat/                # useChat 内部实现（SSE 解析/消息构建/回合控制）
     useConversations.ts     # 会话 CRUD
     useSandbox.ts           # 虚拟文件系统 + mock shell
     useQuota.ts             # 配额查询
+    useToolExecution.ts     # 本地工具执行（前端）
   lib/
     tools/                  # 工具定义、系统提示词、Tavily 搜索
     sandbox/                # Mock shell 与模板文件
+    routes.ts               # 前端路由常量（API 路径）
+    config.ts               # 各类限制（配额/轮次/模型等）
   microscope/               # 演示模式可视化引擎
   server/
     auth/                   # NextAuth 配置
+    chat/                   # mock/real provider + stream handler + tool executor
     db.ts                   # Prisma client
-    observability.ts        # 计数器/延迟统计/Trace
+    observability.ts        # 计数器/延迟统计/Trace（内存 store）
     quota.ts                # 令牌桶配额逻辑
     api/                    # tRPC router
 prisma/
@@ -89,9 +96,11 @@ prisma/
   - chat/agent → `ChatLayout`
   - ide → `IdeLayout`
   - cli → `CliLayout`
-- `src/hooks/useChat.ts`：
+- `src/hooks/useChat.ts`（入口）/ `src/hooks/useChat/*`（实现）：
   - 组装请求 payload（含 `x_mode` 与历史 messages）
-  - SSE 解析（`parseSSE`）
+  - SSE 解析（`useChat/sse-parser.ts`）
+  - 消息构建与增量合并（`useChat/message-builder.ts`）
+  - 回合控制与 UI 状态（`useChat/core.ts`）
   - 处理 tool_calls / working 状态 / [DONE]
   - 将消息持久化到 `/api/conversations/[id]/messages`
 - `src/hooks/useConversations.ts`：会话列表加载、创建、删除、更新标题
@@ -131,7 +140,7 @@ prisma/
 ### 7) 认证、配额与可观测性
 - `src/server/auth/*`：NextAuth（GitHub OAuth）
 - `src/server/quota.ts` & `src/app/api/quota/route.ts`：令牌桶限额（默认 60/h）
-- `src/server/observability.ts` & `src/app/api/metrics` / `debug/traces`：指标与 trace
+- `src/server/observability.ts` & `src/app/api/metrics` / `debug/traces`：指标与 trace（进程内内存存储，重启会清空）
 
 ---
 
@@ -157,7 +166,7 @@ prisma/
 1. `useChat` 发送请求到 `/api/chat/stream`。
 2. SSE Stream 返回 token/工具调用/working 状态。
 3. `useChat` 将消息写入 `/api/conversations/[id]/messages`。
-4. `observability` 记录 trace + metrics，`quota` 控制频率。
+4. `observability` 记录 trace + metrics（内存存储），`quota` 控制频率。
 
 ### C. IDE/CLI 模式（沙盒）
 1. `useSandbox` 初始化虚拟文件系统。

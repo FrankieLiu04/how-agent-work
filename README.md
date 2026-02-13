@@ -31,8 +31,8 @@ A specialized UI component that visualizes the hidden details of LLM interaction
 ### 🛡️ Backend & Infrastructure
 - **Hybrid Streaming Engine**:
   - **Mock Mode**: Zero-latency simulation for UI testing (default).
-  - **Live Mode**: Real-time OpenAI API passthrough (requires Authentication).
-- **Robust Rate Limiting**: Token bucket algorithm implementing strict quotas (e.g., 5 requests/hour/user) to prevent abuse.
+  - **Live Mode**: Real-time OpenAI-compatible API proxy (requires Authentication).
+- **Robust Rate Limiting**: Token bucket algorithm implementing strict quotas (default: 60 requests/hour/user) to prevent abuse.
 - **Observability**:
   - **Metrics**: Real-time request counters and latency histograms exposed at `/api/metrics`.
   - **Tracing**: Detailed request-level tracing for debugging complex agent flows at `/api/debug/traces`.
@@ -45,8 +45,8 @@ The application follows a clean, unidirectional data flow:
 2.  **Gateway**: The Next.js API route authenticates the request via NextAuth and checks rate limits against the PostgreSQL database.
 3.  **Engine**:
     *   If **Mock**: Generates synthetic tokens based on predefined scenarios.
-    *   If **Live**: Proxies the request to OpenAI, handling stream transformation and backpressure.
-4.  **Observability**: Side-effects asynchronously record metrics and traces to the database, ensuring minimal latency impact on the user request.
+    *   If **Live**: Proxies the request to an OpenAI-compatible provider (default base URL points to DeepSeek), handling stream transformation and backpressure.
+4.  **Observability**: Side-effects record metrics and traces to an in-memory store and expose them via `/api/metrics` and `/api/debug/traces`.
 
 ## 🚀 Getting Started
 
@@ -96,13 +96,17 @@ See `.env.example` for the full list of variables.
 | `AUTH_SECRET` | NextAuth secret key (generate with `openssl rand -base64 32`) | Yes |
 | `AUTH_GITHUB_ID` | GitHub OAuth Client ID | Yes |
 | `AUTH_GITHUB_SECRET` | GitHub OAuth Client Secret | Yes |
-| `OPENAI_API_KEY` | OpenAI API Key for live mode | No |
-| `OPENAI_BASE_URL` | Custom OpenAI-compatible gateway URL | No |
+| `AUTH_URL` | NextAuth base URL (recommended for Vercel/custom domains) | No |
+| `AUTH_TRUST_HOST` | Trust proxy headers (recommended on Vercel) | No |
+| `OPENAI_API_KEY` | API key for live mode (OpenAI-compatible) | No |
+| `OPENAI_BASE_URL` | Custom OpenAI-compatible base URL | No |
+| `TAVILY_API_KEY` | Enables web search tool (agent) | No |
 
 ## 📚 Documentation
 
-- **Deployment Guide**: [DEPLOY_PUBLIC.md](docs/DEPLOY_PUBLIC.md)
-- **Project Boundaries**: [VIBE_BOUNDARIES.md](docs/VIBE_BOUNDARIES.md)
+- **Project Overview**: [PROJECT.md](PROJECT.md)
+- **Ops / Pitfalls Notes**: [AGENT.md](AGENT.md)
+- **Environment Variables**: [.env.example](.env.example)
 
 ## 🛠 Development Commands
 

@@ -15,6 +15,11 @@ This document highlights project-specific settings and memory points for the nex
 - Chat history is persisted per conversation via `/api/conversations/[id]/messages` and loaded on mode/conversation change.
 - `LiveChat` remembers last selected conversation per mode and auto-selects when switching modes.
 
+## Provider and observability behavior
+
+- `POST /api/chat/stream` uses mock streaming by default; it switches to real streaming when the user is authenticated, `OPENAI_API_KEY` is present, and the request does not explicitly disable real mode.
+- Metrics and traces are stored in an in-memory global store and exposed via `/api/metrics` and `/api/debug/traces` (they reset on server restart).
+
 ## UI behavior
 
 - Live mode chat panes use a pinned input and a scrollable message list to avoid layout breakage.
@@ -44,4 +49,4 @@ This document highlights project-specific settings and memory points for the nex
 ## Environment variables
 
 - Required in Vercel: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`.
-- Optional: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `AUTH_URL`, `AUTH_TRUST_HOST`.
+- Optional: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TAVILY_API_KEY`, `AUTH_URL`, `AUTH_TRUST_HOST`.
