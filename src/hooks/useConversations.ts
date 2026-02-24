@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Conversation } from "~/components/ConversationList";
 
-type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI";
+type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI" | "FINANCE";
 
 interface UseConversationsOptions {
   mode: ConversationMode;

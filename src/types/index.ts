@@ -1,6 +1,6 @@
-export type ChatMode = "chat" | "agent" | "ide" | "cli";
+export type ChatMode = "chat" | "agent" | "ide" | "cli" | "finance";
 
-export type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI";
+export type ConversationMode = "CHAT" | "AGENT" | "IDE" | "CLI" | "FINANCE";
 
 export type MessageRole = "user" | "assistant" | "tool" | "system";
 

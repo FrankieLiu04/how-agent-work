@@ -80,7 +80,8 @@ export async function handleChatStream(context: StreamHandlerContext): Promise<S
   }
 
   let quota: Awaited<ReturnType<typeof consumeHourlyQuota>> | null = null;
-  const useReal = Boolean(userId && env.OPENAI_API_KEY && body.x_use_real !== false);
+  const requestedReal = Boolean(userId && env.OPENAI_API_KEY && body.x_use_real !== false);
+  const useReal = requestedReal && mode === "finance";
   trace.provider = useReal ? "deepseek" : "mock";
 
   if (useReal && userId) {
@@ -131,6 +132,7 @@ export async function handleChatStream(context: StreamHandlerContext): Promise<S
       traceId,
       trace,
       quota,
+      userId,
       ttfbMs,
     });
   }
@@ -162,11 +164,12 @@ interface RealModeOptions {
   traceId: string;
   trace: ReturnType<typeof startTrace>;
   quota: Awaited<ReturnType<typeof consumeHourlyQuota>> | null;
+  userId: string | undefined;
   ttfbMs: number;
 }
 
 async function handleRealMode(options: RealModeOptions): Promise<StreamHandlerResult> {
-  const { request, body, mode, traceId, trace, quota } = options;
+  const { request, body, mode, traceId, trace, quota, userId } = options;
 
   incrementCounter("streams_total{route=/api/chat/stream,provider=deepseek}");
 
@@ -211,6 +214,7 @@ async function handleRealMode(options: RealModeOptions): Promise<StreamHandlerRe
           mode,
           messages: preparedMessages,
           signal: request.signal,
+          userId,
           trace: {
             startMs: trace.startMs,
             provider: trace.provider,

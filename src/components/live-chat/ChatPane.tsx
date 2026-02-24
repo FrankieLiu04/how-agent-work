@@ -93,6 +93,7 @@ export function ChatPane({
         {mode === "agent" && "🤖"}
         {mode === "ide" && "💻"}
         {mode === "cli" && "⚡"}
+        {mode === "finance" && "📈"}
       </div>
       <div className="live-chat__empty-title">
         {emptyVariant === "copilot" && "Ask Copilot"}
@@ -100,6 +101,7 @@ export function ChatPane({
         {emptyVariant === "default" && mode === "agent" && "Ask me anything (I can search the web)"}
         {emptyVariant === "default" && mode === "ide" && "Describe what you want to build"}
         {emptyVariant === "default" && mode === "cli" && "Describe a task in natural language"}
+        {emptyVariant === "default" && mode === "finance" && "Ask your Finance Agent"}
       </div>
       <div className="live-chat__empty-hint">
         {emptyVariant === "copilot" && "Chat with Copilot about the codebase."}
@@ -107,6 +109,7 @@ export function ChatPane({
         {emptyVariant === "default" && mode === "agent" && "I'll use tools to help answer your questions."}
         {emptyVariant === "default" && mode === "ide" && "I'll help you write and organize code files."}
         {emptyVariant === "default" && mode === "cli" && "I'll execute commands to complete your task."}
+        {emptyVariant === "default" && mode === "finance" && "Tell me your goals, constraints, and what you want to analyze."}
       </div>
     </div>
   );

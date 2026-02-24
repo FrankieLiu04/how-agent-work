@@ -21,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const where = {
     userId: session.user.id,
-    ...(mode && ["CHAT", "AGENT", "IDE", "CLI"].includes(mode)
+    ...(mode && ["CHAT", "AGENT", "IDE", "CLI", "FINANCE"].includes(mode)
       ? { mode }
       : {}),
   };
@@ -96,9 +96,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const mode = (body.mode?.toUpperCase() ?? "CHAT") as ConversationMode;
-  if (!["CHAT", "AGENT", "IDE", "CLI"].includes(mode)) {
+  if (!["CHAT", "AGENT", "IDE", "CLI", "FINANCE"].includes(mode)) {
     return new Response(
-      JSON.stringify({ error: "Invalid mode. Must be CHAT, AGENT, IDE, or CLI" }),
+      JSON.stringify({ error: "Invalid mode. Must be CHAT, AGENT, IDE, CLI, or FINANCE" }),
       {
         status: 400,
         headers: { "Content-Type": "application/json" },

@@ -8,6 +8,7 @@ generator client {
 datasource db {
     provider = "postgresql"
     url      = env("DATABASE_URL")
+    directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model Post {
@@ -62,6 +63,9 @@ model User {
     usageEvents   UsageEvent[]
     conversations Conversation[]
     virtualFiles  VirtualFile[]
+    financeProfile FinanceProfile?
+    financeAssets  FinanceAsset[]
+    financeCards   FinanceKnowledgeCard[]
 }
 
 model VerificationToken {
@@ -112,6 +116,7 @@ enum ConversationMode {
     AGENT
     IDE
     CLI
+    FINANCE
 }
 
 model Conversation {
@@ -161,4 +166,50 @@ model VirtualFile {
 
     @@unique([userId, path])
     @@index([userId])
+}
+
+// ============================================
+// 个人理财与学习 (Finance Agent)
+// ============================================
+
+model FinanceProfile {
+    id        String   @id @default(cuid())
+    userId    String   @unique
+    data      Json?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FinanceAsset {
+    id        String   @id @default(cuid())
+    userId    String
+    symbol    String
+    name      String?
+    quantity  Float?
+    currency  String?
+    meta      Json?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+    @@unique([userId, symbol])
+}
+
+model FinanceKnowledgeCard {
+    id         String   @id @default(cuid())
+    userId     String
+    title      String
+    content    String   @db.Text
+    tags       String[] @default([])
+    sourceUrls String[] @default([])
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId, updatedAt])
 }

@@ -149,7 +149,19 @@ export async function runMockStream(options: MockStreamOptions): Promise<void> {
               "item.price, ",
               "0);",
             ]
-          : [
+          : mode === "finance"
+            ? [
+                "这是",
+                "教学",
+                "Mock",
+                "模式",
+                "：",
+                "请切换到",
+                "⚡ 实时",
+                "以体验",
+                "Finance Agent。",
+              ]
+            : [
               "我已经",
               "完成了",
               "文件",

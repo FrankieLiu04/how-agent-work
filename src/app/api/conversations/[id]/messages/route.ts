@@ -27,7 +27,7 @@ export async function GET(
   const modeParam = url.searchParams.get("mode");
   const modeUpper = modeParam?.toUpperCase() ?? null;
   const mode =
-    modeUpper && ["CHAT", "AGENT", "IDE", "CLI"].includes(modeUpper)
+    modeUpper && ["CHAT", "AGENT", "IDE", "CLI", "FINANCE"].includes(modeUpper)
       ? (modeUpper as ConversationMode)
       : null;
 

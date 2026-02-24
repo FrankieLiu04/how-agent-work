@@ -33,6 +33,7 @@ export function LiveChat({
     agent: null,
     ide: null,
     cli: null,
+    finance: null,
   });
   const [conversationError, setConversationError] = useState<string | null>(null);
 
@@ -54,12 +55,22 @@ export function LiveChat({
           ? "AGENT"
           : mode === "ide"
             ? "IDE"
-            : "CLI",
+            : mode === "cli"
+              ? "CLI"
+              : "FINANCE",
     autoLoad: isAuthed,
   });
 
   const expectedConversationMode =
-    mode === "chat" ? "CHAT" : mode === "agent" ? "AGENT" : mode === "ide" ? "IDE" : "CLI";
+    mode === "chat"
+      ? "CHAT"
+      : mode === "agent"
+        ? "AGENT"
+        : mode === "ide"
+          ? "IDE"
+          : mode === "cli"
+            ? "CLI"
+            : "FINANCE";
   const effectiveCurrentConversation =
     currentConversation?.mode === expectedConversationMode ? currentConversation : null;
 
@@ -224,7 +235,7 @@ export function LiveChat({
   } = useChat({
     mode,
     conversationId: effectiveCurrentConversation?.id,
-    onToolCall: mode === "agent" ? undefined : handleToolCall,
+    onToolCall: mode === "ide" || mode === "cli" ? handleToolCall : undefined,
     onSuccess: refreshQuota,
     onProtocolEvent,
   });
@@ -256,7 +267,9 @@ export function LiveChat({
             ? "agent"
             : effectiveCurrentConversation.mode === "IDE"
               ? "ide"
-              : "cli";
+              : effectiveCurrentConversation.mode === "CLI"
+                ? "cli"
+                : "finance";
       if (bucket !== mode) return prev;
       const next = { ...prev, [bucket]: effectiveCurrentConversation.id };
       if (typeof window !== "undefined") {

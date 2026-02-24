@@ -5,6 +5,7 @@ import { init, type EngineAPI } from "./engine";
 import { LiveChat } from "~/components/LiveChat";
 import type { ProtocolEvent } from "~/hooks/useChat";
 import type { Mode } from "./state";
+import type { ChatMode } from "~/types";
 
 type ViewMode = "demo" | "live";
 
@@ -19,7 +20,7 @@ type ProtocolLogEntry = {
 
 export function Microscope(props: { isAuthed: boolean; userName: string | null }) {
   const apiRef = useRef<EngineAPI | null>(null);
-  const [currentMode, setCurrentMode] = useState<Mode>("chat");
+  const [currentMode, setCurrentMode] = useState<ChatMode>("chat");
   const [viewMode, setViewMode] = useState<ViewMode>("demo");
   const [protocolLog, setProtocolLog] = useState<ProtocolLogEntry[]>([]);
   const [protocolContext, setProtocolContext] = useState<string>("(Empty)");
@@ -33,17 +34,21 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
     };
   }, []);
 
-  const handleModeChange = (mode: Mode) => {
+  const handleModeChange = (mode: ChatMode) => {
     setCurrentMode(mode);
     if (viewMode === "demo") {
-      apiRef.current?.setMode(mode);
+      if (mode !== "finance") {
+        apiRef.current?.setMode(mode as Mode);
+      }
     }
   };
 
   const handleViewModeChange = (newViewMode: ViewMode) => {
     setViewMode(newViewMode);
     if (newViewMode === "demo") {
-      apiRef.current?.setMode(currentMode);
+      const demoMode: Mode = (currentMode === "finance" ? "chat" : currentMode) as Mode;
+      if (currentMode === "finance") setCurrentMode("chat");
+      apiRef.current?.setMode(demoMode);
     }
     if (newViewMode === "live") {
       setProtocolLog([]);
@@ -126,6 +131,14 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           >
             CLI Coding Agent
           </button>
+          {viewMode === "live" && (
+            <button
+              className={`seg-btn ${currentMode === "finance" ? "active" : ""}`}
+              onClick={() => handleModeChange("finance")}
+            >
+              Finance Agent
+            </button>
+          )}
         </div>
         <div className="header-controls">
           {/* View mode toggle */}

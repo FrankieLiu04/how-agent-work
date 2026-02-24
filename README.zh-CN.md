@@ -28,7 +28,15 @@
 - **Agent 工作流**: 支持多步“思考 (Thinking)”过程与直接“非思考 (Non-Thinking)”响应的对比。
 - **协议分析**: 观察工具调用 (Tool Calls) 和编排逻辑如何影响用户体验。
 
-### 🛡️ 后端与基础设施
+### � Finance Agent（Live）
+- **单一强大入口**：Live 模式对外聚焦为一个个人理财与市场分析 Agent（研究/分析/风控/讲解对外呈现为单一对话）。
+- **行情与新闻**：支持行情与新闻检索工具，并要求输出可追溯来源，不编造数据与链接。
+- **个人数据**：提供最小的个人画像与知识卡片存储接口（`/api/finance/profile`、`/api/finance/cards`），按用户隔离并支持删除。
+- **教学保留**：chat/agent/ide/cli 四模式仍保留用于教学 Mock；但 Live 的真实调用仅在 Finance 模式启用。
+  - 示例：在登录后，用 `PUT /api/finance/profile` 写入 `{"data":{"risk":"中等","horizon_years":5,"goals":["养老","应急金"],"notes":"60/20/20 配置"}}`
+  - 示例：用 `POST /api/finance/cards` 写入学习卡片 `{"title":"久期","content":"...","tags":["bond","risk"],"sourceUrls":["https://..."]}`
+
+### ��️ 后端与基础设施
 - **混合流式引擎**:
   - **Mock 模式**: 零延迟模拟，用于 UI 测试和演示（默认开启）。
   - **Live 模式**: 实时代理 OpenAI 兼容接口（需要登录）。

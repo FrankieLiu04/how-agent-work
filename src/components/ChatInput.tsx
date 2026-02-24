@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { type ChatMode } from "~/types";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
   maxLength?: number;
-  mode?: "chat" | "agent" | "ide" | "cli";
+  mode?: ChatMode;
 }
 
 export function ChatInput({
@@ -56,6 +57,33 @@ export function ChatInput({
   const isOverLimit = charCount > maxLength;
   const isNearLimit = charCount >= maxLength * 0.8;
 
+  const presets: Array<{ label: string; text: string }> =
+    mode === "agent"
+      ? [
+          { label: "热点", text: "帮我检索一下今天美股/科技板块的热点新闻，给出三条要点。" },
+          { label: "对比", text: "对比一下 OpenAI 与 Anthropic 近期动态（请用搜索结果佐证）。" },
+          { label: "学习", text: "解释一下什么是 SSE，并给一个最小示例。" },
+        ]
+      : mode === "ide"
+        ? [
+            { label: "新组件", text: "在 /src/components 下新增一个 Button 组件，支持 primary/secondary 两种样式。" },
+            { label: "修 Bug", text: "帮我排查一个 TypeScript 报错并给出修复步骤。" },
+            { label: "重构", text: "把一个重复逻辑提取为 util 函数，并补一个单元测试。" },
+          ]
+        : mode === "cli"
+          ? [
+              { label: "搜索", text: "在项目里搜索 useReal 的定义与使用位置，并解释其作用。" },
+              { label: "跑测试", text: "运行测试并修复失败用例，确保全部通过。" },
+              { label: "找入口", text: "找出 /api/chat/stream 的端到端链路并整理成清单。" },
+            ]
+          : mode === "finance"
+            ? [
+                { label: "简报", text: "给我一份今日市场简报：指数、利率、美元、黄金、科技股要闻，并附上来源。" },
+                { label: "持仓", text: "我有 60% 指数基金、20% 债券基金、20% 现金，风险偏好中等，目标 5 年。给出调整建议与学习清单。" },
+                { label: "概念", text: "用通俗方式解释久期与利率风险，并举一个小例子。" },
+              ]
+            : [];
+
   // Mode-specific placeholders
   const getPlaceholder = () => {
     if (placeholder !== "Type a message...") return placeholder;
@@ -68,6 +96,8 @@ export function ChatInput({
         return "Describe what you want to build...";
       case "cli":
         return "Describe a task (e.g., 'create a Python script')...";
+      case "finance":
+        return "描述你的目标、约束与想分析的市场/持仓...";
       default:
         return placeholder;
     }
@@ -75,6 +105,21 @@ export function ChatInput({
 
   return (
     <div className="chat-input-container">
+      {presets.length > 0 && (
+        <div className="chat-input-presets">
+          {presets.map((p) => (
+            <button
+              key={p.label}
+              className="chat-input-preset"
+              type="button"
+              disabled={disabled}
+              onClick={() => setValue(p.text)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="chat-input-wrapper">
         <textarea
           ref={textareaRef}
@@ -110,6 +155,30 @@ export function ChatInput({
           padding: 12px;
           background: var(--card-bg);
           border-top: 1px solid var(--border);
+        }
+
+        .chat-input-presets {
+          display: flex;
+          gap: 8px;
+          padding: 0 4px 10px;
+          overflow-x: auto;
+        }
+
+        .chat-input-preset {
+          border: 1px solid var(--border);
+          background: var(--bg);
+          color: var(--text);
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          cursor: pointer;
+          white-space: nowrap;
+          opacity: 0.9;
+        }
+
+        .chat-input-preset:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
 
         .chat-input-wrapper {

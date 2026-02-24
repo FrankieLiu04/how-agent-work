@@ -28,7 +28,15 @@ A specialized UI component that visualizes the hidden details of LLM interaction
 - **Agent Workflows**: Support for multi-step "Thinking" processes vs. direct "Non-Thinking" responses.
 - **Protocol Analysis**: Inspect how tool calls and orchestration affect the user experience.
 
-### 🛡️ Backend & Infrastructure
+### � Finance Agent (Live)
+- **Single powerful entry point**: Live mode is refocused to a personal finance + market analysis agent (internally tool-driven, externally one agent).
+- **Market + news tools**: Supports market quote/history and web/news search tools, requiring traceable sources and no fabricated links/data.
+- **Personal data**: Minimal profile and knowledge-card storage APIs (`/api/finance/profile`, `/api/finance/cards`) with user isolation and deletion.
+- **Teaching preserved**: chat/agent/ide/cli remain as teaching Mock modes; real calls are enabled only in Finance mode.
+  - Example: after sign-in, `PUT /api/finance/profile` with `{"data":{"risk":"moderate","horizon_years":5,"goals":["retirement","emergency_fund"]}}`
+  - Example: `POST /api/finance/cards` with `{"title":"Duration","content":"...","tags":["bond","risk"],"sourceUrls":["https://..."]}`
+
+### ��️ Backend & Infrastructure
 - **Hybrid Streaming Engine**:
   - **Mock Mode**: Zero-latency simulation for UI testing (default).
   - **Live Mode**: Real-time OpenAI-compatible API proxy (requires Authentication).
