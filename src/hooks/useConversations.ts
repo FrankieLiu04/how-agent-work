@@ -31,33 +31,61 @@ export function useConversations({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentConversationRef = useRef<Conversation | null>(null);
+  const modeRef = useRef<ConversationMode>(mode);
+  const loadRequestSeqRef = useRef(0);
+  const selectRequestSeqRef = useRef(0);
+  const cacheRef = useRef<
+    Record<ConversationMode, { conversations: Conversation[]; currentId: string | null }>
+  >({
+    CHAT: { conversations: [], currentId: null },
+    AGENT: { conversations: [], currentId: null },
+    IDE: { conversations: [], currentId: null },
+    CLI: { conversations: [], currentId: null },
+    FINANCE: { conversations: [], currentId: null },
+  });
 
   // Keep ref in sync
   currentConversationRef.current = currentConversation;
+  modeRef.current = mode;
 
   const loadConversations = useCallback(async () => {
+    const requestMode = mode;
+    const requestId = ++loadRequestSeqRef.current;
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/conversations?mode=${mode}`);
+      const response = await fetch(`/api/conversations?mode=${requestMode}`);
       if (!response.ok) {
         throw new Error(`Failed to load conversations: ${response.status}`);
       }
       const data = (await response.json()) as { conversations: Conversation[] };
+      if (loadRequestSeqRef.current !== requestId || modeRef.current !== requestMode) {
+        return;
+      }
+
       setConversations(data.conversations);
       const cur = currentConversationRef.current;
-      if (cur && !data.conversations.some((c) => c.id === cur.id)) {
-        setCurrentConversation(null);
-      }
+      const cachedCurrentId = cacheRef.current[requestMode].currentId;
+      const preferredId = cur?.id ?? cachedCurrentId;
+      const nextCurrent = preferredId
+        ? data.conversations.find((c) => c.id === preferredId) ?? null
+        : null;
+      setCurrentConversation(nextCurrent);
     } catch (err) {
+      if (loadRequestSeqRef.current !== requestId || modeRef.current !== requestMode) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load conversations");
     } finally {
-      setIsLoading(false);
+      if (loadRequestSeqRef.current === requestId && modeRef.current === requestMode) {
+        setIsLoading(false);
+      }
     }
   }, [mode]);
 
   const createConversation = useCallback(async (): Promise<Conversation | null> => {
+    const requestMode = mode;
     setIsLoading(true);
     setError(null);
 
@@ -65,7 +93,7 @@ export function useConversations({
       const response = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode: requestMode }),
       });
 
       if (!response.ok) {
@@ -76,6 +104,9 @@ export function useConversations({
       }
 
       const newConversation = (await response.json()) as Conversation;
+      if (modeRef.current !== requestMode) {
+        return newConversation;
+      }
       setConversations((prev) => [newConversation, ...prev]);
       setCurrentConversation(newConversation);
       return newConversation;
@@ -88,14 +119,16 @@ export function useConversations({
   }, [mode]);
 
   const selectConversation = useCallback(async (id: string) => {
+    const requestMode = mode;
     const conv = conversations.find((c) => c.id === id);
     if (conv) {
       setCurrentConversation(conv);
     } else {
+      const requestId = ++selectRequestSeqRef.current;
       // Fetch from server if not in local list
       try {
-        const response = await fetch(`/api/conversations/${id}?mode=${mode}`);
-        if (response.ok) {
+        const response = await fetch(`/api/conversations/${id}?mode=${requestMode}`);
+        if (response.ok && selectRequestSeqRef.current === requestId && modeRef.current === requestMode) {
           const data = (await response.json()) as Conversation;
           setCurrentConversation(data);
         }
@@ -160,9 +193,22 @@ export function useConversations({
   }, [autoLoad, loadConversations]);
 
   useEffect(() => {
-    setConversations([]);
-    setCurrentConversation(null);
+    const cached = cacheRef.current[mode];
+    setConversations(cached.conversations);
+    const cachedCurrent = cached.currentId
+      ? cached.conversations.find((c) => c.id === cached.currentId) ?? null
+      : null;
+    setCurrentConversation(cachedCurrent);
+    setIsLoading(false);
+    setError(null);
   }, [mode]);
+
+  useEffect(() => {
+    cacheRef.current[mode] = {
+      conversations,
+      currentId: currentConversation?.id ?? null,
+    };
+  }, [mode, conversations, currentConversation?.id]);
 
   return {
     conversations,

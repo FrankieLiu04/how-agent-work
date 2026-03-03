@@ -25,6 +25,10 @@ import {
 export type { ChatMessage, UseChatOptions, UseChatReturn };
 export type { ChatMode, ProtocolEvent };
 
+function buildConversationKey(mode: ChatMode, conversationId: string | null | undefined): string {
+  return `${mode}:${conversationId ?? "none"}`;
+}
+
 export function useChat({
   mode,
   conversationId,
@@ -39,10 +43,13 @@ export function useChat({
   const [traceId, setTraceId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
   const activeKeyRef = useRef<string>("none:none");
   const messagesRef = useRef<ChatMessage[]>([]);
   const requestSeqRef = useRef(0);
   const activeRequestIdRef = useRef(0);
+  const loadSeqRef = useRef(0);
+  const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
@@ -59,15 +66,30 @@ export function useChat({
   }, []);
 
   const loadMessages = useCallback(async () => {
+    const loadKey = buildConversationKey(mode, conversationId);
+    loadAbortControllerRef.current?.abort();
+
     if (!conversationId) {
       setMessages([]);
       return;
     }
 
+    const cachedMessages = messageCacheRef.current.get(loadKey);
+    if (cachedMessages) {
+      setMessages(cachedMessages);
+    } else {
+      setMessages([]);
+    }
+
+    const requestId = ++loadSeqRef.current;
+    const controller = new AbortController();
+    loadAbortControllerRef.current = controller;
+
     try {
       const conversationMode = mode.toUpperCase();
       const response = await fetch(
-        `/api/conversations/${conversationId}/messages?mode=${conversationMode}`
+        `/api/conversations/${conversationId}/messages?mode=${conversationMode}`,
+        { signal: controller.signal }
       );
       if (!response.ok) {
         throw new Error(`Failed to load messages: ${response.status}`);
@@ -84,8 +106,7 @@ export function useChat({
         }>;
       };
 
-      setMessages(
-        data.messages.map((m) => ({
+      const mappedMessages: ChatMessage[] = data.messages.map((m) => ({
           id: m.id,
           role: m.role,
           content: m.content ?? "",
@@ -94,10 +115,26 @@ export function useChat({
           working: m.working ?? undefined,
           timestamp: new Date(m.createdAt),
           isStreaming: false,
-        }))
-      );
+      }));
+
+      if (loadSeqRef.current !== requestId || activeKeyRef.current !== loadKey) {
+        return;
+      }
+
+      messageCacheRef.current.set(loadKey, mappedMessages);
+      setMessages(mappedMessages);
     } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        return;
+      }
+      if (loadSeqRef.current !== requestId || activeKeyRef.current !== loadKey) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load messages");
+    } finally {
+      if (loadAbortControllerRef.current === controller) {
+        loadAbortControllerRef.current = null;
+      }
     }
   }, [conversationId, mode]);
 
@@ -129,13 +166,19 @@ export function useChat({
   );
 
   useEffect(() => {
-    activeKeyRef.current = `${mode}:${conversationId ?? "none"}`;
+    activeKeyRef.current = buildConversationKey(mode, conversationId);
     activeRequestIdRef.current = 0;
     stopGeneration();
-    clearMessages();
+    setError(null);
     setTraceId(null);
     void loadMessages();
-  }, [conversationId, mode, loadMessages, stopGeneration, clearMessages]);
+  }, [conversationId, mode, loadMessages, stopGeneration]);
+
+  useEffect(() => {
+    return () => {
+      loadAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   const streamOneRound = useCallback(
     async (
@@ -578,7 +621,9 @@ export function useChat({
 
   useEffect(() => {
     messagesRef.current = messages;
-  }, [messages]);
+    if (!conversationId) return;
+    messageCacheRef.current.set(buildConversationKey(mode, conversationId), messages);
+  }, [messages, mode, conversationId]);
 
   return {
     messages,

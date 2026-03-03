@@ -21,6 +21,7 @@ jobs:
       AUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: true
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?schema=public
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?schema=public
     services:
       postgres:
         image: postgres:16
@@ -48,5 +49,7 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run test
+
+      - run: npm run db:migrate
 
       - run: npm run build
