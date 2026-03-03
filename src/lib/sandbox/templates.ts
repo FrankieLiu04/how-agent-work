@@ -61,9 +61,9 @@ This is a virtual file system where you can:
 
 ## File Limits
 
-- Maximum 20 files
-- Maximum 5KB per file
-- Maximum 100KB total storage
+- Maximum 200 files
+- Maximum 128KB per file
+- Maximum 5MB total storage
 
 ## Available Commands (CLI Mode)
 

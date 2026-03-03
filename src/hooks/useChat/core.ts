@@ -150,19 +150,42 @@ export function useChat({
       const targetId = args.conversationIdOverride ?? conversationId;
       if (!targetId) return;
 
-      await fetch(`/api/conversations/${targetId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: args.role,
-          content: args.content,
-          toolCalls: args.toolCalls,
-          toolCallId: args.toolCallId,
-          working: args.working,
-        }),
-      });
+      try {
+        const response = await fetch(`/api/conversations/${targetId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: args.role,
+            content: args.content,
+            toolCalls: args.toolCalls,
+            toolCallId: args.toolCallId,
+            working: args.working,
+          }),
+        });
+
+        if (!response.ok) {
+          const parsed = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+          };
+          const reason =
+            parsed.message ??
+            parsed.error ??
+            `HTTP ${response.status}`;
+          throw new Error(reason);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        const persistedError = `Message persistence failed (${args.role}): ${message}`;
+        setError((prev) => prev ?? persistedError);
+        onProtocolEvent?.({
+          type: "info",
+          title: "Persist Error",
+          content: persistedError,
+        });
+      }
     },
-    [conversationId]
+    [conversationId, onProtocolEvent]
   );
 
   useEffect(() => {
@@ -258,9 +281,8 @@ export function useChat({
       let toolCalls: ToolCall[] = [];
       let finishReason: string | null = null;
       const toolCallIndexMap = new Map<number, { arrayIndex: number; rawArgs: string }>();
-      let currentWorking: { status: "working" | "done"; summary: string[] } | undefined;
 
-      const { appendWorkingSummary, setWorkingStatus } = createWorkingUpdater(
+      const { appendWorkingSummary, setWorkingStatus, getCurrentWorking } = createWorkingUpdater(
         assistantMessage.id,
         guardedSetMessages
       );
@@ -424,7 +446,7 @@ export function useChat({
         fullContent,
         toolCalls,
         finishReason,
-        working: currentWorking,
+        working: getCurrentWorking(),
       };
     },
     [mode, onProtocolEvent, saveMessage]

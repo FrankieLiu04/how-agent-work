@@ -28,6 +28,7 @@ interface SandboxLimits {
 
 interface UseSandboxOptions {
   autoInit?: boolean;
+  conversationId?: string | null;
 }
 
 interface UseSandboxReturn {
@@ -41,24 +42,36 @@ interface UseSandboxReturn {
   
   // File operations
   loadFiles: () => Promise<void>;
-  readFile: (path: string) => Promise<string | null>;
-  writeFile: (path: string, content: string) => Promise<SandboxWriteResult>;
-  deleteFile: (path: string) => Promise<boolean>;
+  readFile: (path: string, conversationIdOverride?: string | null) => Promise<string | null>;
+  writeFile: (path: string, content: string, conversationIdOverride?: string | null) => Promise<SandboxWriteResult>;
+  deleteFile: (path: string, conversationIdOverride?: string | null) => Promise<boolean>;
   
   // Shell operations
-  execCommand: (command: string) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  initSandbox: (force?: boolean) => Promise<void>;
+  execCommand: (command: string, conversationIdOverride?: string | null) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  initSandbox: (force?: boolean, conversationIdOverride?: string | null) => Promise<void>;
   
   // Terminal
   addTerminalLine: (type: TerminalLine["type"], content: string) => void;
   clearTerminal: () => void;
+  clearError: () => void;
 }
 
 function generateLineId(): string {
   return `line_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSandboxReturn {
+function resolveScopeId(baseConversationId: string | null | undefined, override?: string | null): string | null {
+  if (override !== undefined) return override;
+  return baseConversationId ?? null;
+}
+
+function withScope(path: string, conversationId: string | null): string {
+  if (!conversationId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}conversationId=${encodeURIComponent(conversationId)}`;
+}
+
+export function useSandbox({ autoInit = false, conversationId = null }: UseSandboxOptions = {}): UseSandboxReturn {
   const [files, setFiles] = useState<SandboxFile[]>([]);
   const [limits, setLimits] = useState<SandboxLimits | null>(null);
   const [cwd, setCwd] = useState("/");
@@ -78,14 +91,28 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     setTerminalLines([]);
   }, []);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   const loadFilesImpl = useCallback(async ({ silent }: { silent: boolean }) => {
+    if (!conversationId) {
+      setFiles([]);
+      setLimits(null);
+      setInitialized(false);
+      if (!silent) {
+        setError(null);
+      }
+      return;
+    }
+
     if (!silent) {
       setIsLoading(true);
       setError(null);
     }
 
     try {
-      const response = await fetch("/api/sandbox/files");
+      const response = await fetch(withScope("/api/sandbox/files", conversationId));
       if (!response.ok) {
         const parsed = await parseErrorResponse(response);
         throw new Error(parsed.message);
@@ -107,15 +134,19 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [conversationId]);
 
   const loadFiles = useCallback(async () => {
     await loadFilesImpl({ silent: false });
   }, [loadFilesImpl]);
 
-  const readFile = useCallback(async (path: string): Promise<string | null> => {
+  const readFile = useCallback(async (path: string, conversationIdOverride?: string | null): Promise<string | null> => {
+    const scopeId = resolveScopeId(conversationId, conversationIdOverride);
+    if (!scopeId) return null;
     try {
-      const response = await fetch(`/api/sandbox/file?path=${encodeURIComponent(path)}`);
+      const response = await fetch(
+        `/api/sandbox/file?path=${encodeURIComponent(path)}&conversationId=${encodeURIComponent(scopeId)}`
+      );
       if (!response.ok) return null;
 
       const data = (await response.json()) as { content?: string };
@@ -123,20 +154,27 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     } catch {
       return null;
     }
-  }, []);
+  }, [conversationId]);
 
-  const writeFile = useCallback(async (path: string, content: string): Promise<SandboxWriteResult> => {
+  const writeFile = useCallback(async (path: string, content: string, conversationIdOverride?: string | null): Promise<SandboxWriteResult> => {
+    const scopeId = resolveScopeId(conversationId, conversationIdOverride);
+    if (!scopeId) {
+      const message = "No conversation selected";
+      setError(message);
+      return { ok: false, error: message, code: "missing_conversation" };
+    }
     setError(null);
 
     try {
       const response = await fetch("/api/sandbox/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content, isDir: false }),
+        body: JSON.stringify({ path, content, isDir: false, conversationId: scopeId }),
       });
 
       if (!response.ok) {
         const errorData = await parseErrorResponse(response);
+        setError(errorData.message);
         return {
           ok: false,
           error: errorData.message,
@@ -171,15 +209,23 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       setError(message);
       return { ok: false, error: message };
     }
-  }, [loadFilesImpl]);
+  }, [conversationId, loadFilesImpl]);
 
-  const deleteFile = useCallback(async (path: string): Promise<boolean> => {
+  const deleteFile = useCallback(async (path: string, conversationIdOverride?: string | null): Promise<boolean> => {
+    const scopeId = resolveScopeId(conversationId, conversationIdOverride);
+    if (!scopeId) {
+      setError("No conversation selected");
+      return false;
+    }
     setError(null);
 
     try {
-      const response = await fetch(`/api/sandbox/files?path=${encodeURIComponent(path)}`, {
+      const response = await fetch(
+        `/api/sandbox/files?path=${encodeURIComponent(path)}&conversationId=${encodeURIComponent(scopeId)}`,
+        {
         method: "DELETE",
-      });
+        }
+      );
 
       if (!response.ok) {
         const errorData = await parseErrorResponse(response);
@@ -193,9 +239,16 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       setError(err instanceof Error ? err.message : "Failed to delete file");
       return false;
     }
-  }, [loadFiles]);
+  }, [conversationId, loadFiles]);
 
-  const execCommand = useCallback(async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+  const execCommand = useCallback(async (command: string, conversationIdOverride?: string | null): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+    const scopeId = resolveScopeId(conversationId, conversationIdOverride);
+    if (!scopeId) {
+      const errorMsg = "No conversation selected";
+      setError(errorMsg);
+      addTerminalLine("error", errorMsg);
+      return { stdout: "", stderr: errorMsg, exitCode: 1 };
+    }
     setError(null);
 
     // Add command to terminal
@@ -205,7 +258,7 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       const response = await fetch("/api/sandbox/exec", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, cwd }),
+        body: JSON.stringify({ command, cwd, conversationId: scopeId }),
       });
 
       if (!response.ok) {
@@ -252,9 +305,14 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       addTerminalLine("error", errorMsg);
       return { stdout: "", stderr: errorMsg, exitCode: 1 };
     }
-  }, [cwd, addTerminalLine, loadFiles]);
+  }, [conversationId, cwd, addTerminalLine, loadFiles]);
 
-  const initSandbox = useCallback(async (force = false) => {
+  const initSandbox = useCallback(async (force = false, conversationIdOverride?: string | null) => {
+    const scopeId = resolveScopeId(conversationId, conversationIdOverride);
+    if (!scopeId) {
+      setError("No conversation selected");
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -262,7 +320,7 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
       const response = await fetch("/api/sandbox/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force }),
+        body: JSON.stringify({ force, conversationId: scopeId }),
       });
 
       if (!response.ok) {
@@ -283,19 +341,21 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     } finally {
       setIsLoading(false);
     }
-  }, [addTerminalLine, loadFiles]);
+  }, [conversationId, addTerminalLine, loadFiles]);
 
   useEffect(() => {
     if (!autoInit) return;
+    if (!conversationId) return;
     void loadFiles();
-  }, [autoInit, loadFiles]);
+  }, [autoInit, conversationId, loadFiles]);
 
   useEffect(() => {
     if (!autoInit) return;
+    if (!conversationId) return;
     if (initialized) return;
     if (files.length !== 0) return;
     void initSandbox();
-  }, [autoInit, files.length, initSandbox, initialized]);
+  }, [autoInit, conversationId, files.length, initSandbox, initialized]);
 
   return {
     files,
@@ -313,5 +373,6 @@ export function useSandbox({ autoInit = false }: UseSandboxOptions = {}): UseSan
     initSandbox,
     addTerminalLine,
     clearTerminal,
+    clearError,
   };
 }

@@ -1,6 +1,45 @@
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 import { getTemplatesWithSizes } from "~/lib/sandbox/templates";
+import { fromStoredPath, getScopeRoot, toStoredPath } from "~/lib/sandbox/scope";
+
+function whereForScope(userId: string, conversationId: string | null) {
+  if (conversationId) {
+    return {
+      userId,
+      path: {
+        startsWith: `${toStoredPath("/", conversationId)}`,
+      },
+    };
+  }
+
+  return {
+    userId,
+    NOT: {
+      path: {
+        startsWith: `${getScopeRoot()}/`,
+      },
+    },
+  };
+}
+
+async function ensureScopeAccess(userId: string, conversationId: string | null): Promise<Response | null> {
+  if (!conversationId) return null;
+  const conversation = await db.conversation.findFirst({
+    where: {
+      id: conversationId,
+      userId,
+    },
+    select: { id: true },
+  });
+  if (!conversation) {
+    return new Response(JSON.stringify({ error: "Conversation not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return null;
+}
 
 /**
  * POST /api/sandbox/init
@@ -20,7 +59,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  let body: { force?: boolean } = {};
+  let body: { force?: boolean; conversationId?: string | null } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -28,16 +67,19 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const force = body.force ?? false;
+  const conversationId = body.conversationId ?? null;
+  const scopeError = await ensureScopeAccess(session.user.id, conversationId);
+  if (scopeError) return scopeError;
 
   // Check if user already has files
   const existingCount = await db.virtualFile.count({
-    where: { userId: session.user.id },
+    where: whereForScope(session.user.id, conversationId),
   });
 
   if (existingCount > 0 && !force) {
     // Return existing files without reinitializing
     const existingFiles = await db.virtualFile.findMany({
-      where: { userId: session.user.id },
+      where: whereForScope(session.user.id, conversationId),
       orderBy: { path: "asc" },
       select: {
         id: true,
@@ -51,7 +93,10 @@ export async function POST(request: Request): Promise<Response> {
       JSON.stringify({
         initialized: false,
         message: "Sandbox already initialized. Use force=true to reinitialize.",
-        files: existingFiles,
+        files: existingFiles.map((f) => ({
+          ...f,
+          path: fromStoredPath(f.path, conversationId),
+        })),
       }),
       {
         status: 200,
@@ -63,7 +108,7 @@ export async function POST(request: Request): Promise<Response> {
   // If force, delete all existing files
   if (force && existingCount > 0) {
     await db.virtualFile.deleteMany({
-      where: { userId: session.user.id },
+      where: whereForScope(session.user.id, conversationId),
     });
   }
 
@@ -76,7 +121,7 @@ export async function POST(request: Request): Promise<Response> {
       const file = await db.virtualFile.create({
         data: {
           userId: session.user.id,
-          path: template.path,
+          path: toStoredPath(template.path, conversationId),
           content: template.content,
           isDir: template.isDir,
           size: template.size,
@@ -84,7 +129,7 @@ export async function POST(request: Request): Promise<Response> {
       });
       return {
         id: file.id,
-        path: file.path,
+        path: fromStoredPath(file.path, conversationId),
         isDir: file.isDir,
         size: file.size,
       };
@@ -116,8 +161,9 @@ export async function GET(): Promise<Response> {
     });
   }
 
+  const conversationId = null;
   const existingCount = await db.virtualFile.count({
-    where: { userId: session.user.id },
+    where: whereForScope(session.user.id, conversationId),
   });
 
   return new Response(

@@ -1,4 +1,4 @@
-// UI Components for the real LLM interaction feature
+// UI components for live interaction modes
 export { ChatInput } from "./ChatInput";
 export { QuotaIndicator, LimitIndicator } from "./QuotaIndicator";
 export { ConversationList, type Conversation } from "./ConversationList";

@@ -7,7 +7,11 @@ import type {
   CommandResult,
   QuotaInfo,
 } from "~/types";
-import { API_ROUTES, buildQueryString, conversationsListUrl, sandboxFileUrl } from "~/lib/routes";
+import {
+  API_ROUTES,
+  buildQueryString,
+  conversationsListUrl,
+} from "~/lib/routes";
 
 export interface ApiClientConfig {
   baseUrl?: string;
@@ -160,49 +164,55 @@ class ApiClient {
   };
 
   sandbox = {
-    listFiles: async (): Promise<SandboxFile[]> => {
+    listFiles: async (conversationId?: string): Promise<SandboxFile[]> => {
+      const qs = conversationId ? buildQueryString({ conversationId }) : "";
       const data = await this.request<{ files: SandboxFile[] }>(
-        API_ROUTES.SANDBOX.FILES
+        `${API_ROUTES.SANDBOX.FILES}${qs}`
       );
       return data.files;
     },
 
-    readFile: async (path: string): Promise<string | null> => {
+    readFile: async (path: string, conversationId?: string): Promise<string | null> => {
+      const qs = buildQueryString({ path, conversationId });
       const data = await this.request<{ content: string | null }>(
-        sandboxFileUrl(path)
+        `${API_ROUTES.SANDBOX.FILE}${qs}`
       );
       return data.content;
     },
 
     writeFile: async (
       path: string,
-      content: string
+      content: string,
+      conversationId?: string
     ): Promise<SandboxWriteResult> => {
       return this.request<SandboxWriteResult>(API_ROUTES.SANDBOX.FILES, {
         method: "POST",
-        body: JSON.stringify({ path, content }),
+        body: JSON.stringify({ path, content, conversationId }),
       });
     },
 
-    deleteFile: async (path: string): Promise<void> => {
-      await this.request(sandboxFileUrl(path), {
+    deleteFile: async (path: string, conversationId?: string): Promise<void> => {
+      const qs = buildQueryString({ path, conversationId });
+      await this.request(`${API_ROUTES.SANDBOX.FILES}${qs}`, {
         method: "DELETE",
       });
     },
 
-    init: async (): Promise<{ files: SandboxFile[] }> => {
+    init: async (conversationId?: string): Promise<{ files: SandboxFile[] }> => {
       return this.request(API_ROUTES.SANDBOX.INIT, {
         method: "POST",
+        body: JSON.stringify({ conversationId }),
       });
     },
 
     exec: async (
       command: string,
-      cwd: string = "/"
+      cwd: string = "/",
+      conversationId?: string
     ): Promise<CommandResult> => {
       return this.request<CommandResult>(API_ROUTES.SANDBOX.EXEC, {
         method: "POST",
-        body: JSON.stringify({ command, cwd }),
+        body: JSON.stringify({ command, cwd, conversationId }),
       });
     },
   };

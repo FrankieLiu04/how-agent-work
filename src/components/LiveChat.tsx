@@ -26,6 +26,7 @@ export function LiveChat({
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [openedPath, setOpenedPath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
+  const sandboxConversationIdRef = useRef<string | null>(null);
   const [lastConversationByMode, setLastConversationByMode] = useState<
     Record<ChatMode, string | null>
   >({
@@ -79,14 +80,28 @@ export function LiveChat({
     limits,
     terminalLines,
     isLoading: sandboxLoading,
+    error: sandboxError,
     readFile,
     writeFile,
     deleteFile,
     execCommand,
     initSandbox,
+    clearError: clearSandboxError,
   } = useSandbox({
     autoInit: isAuthed && (mode === "ide" || mode === "cli"),
+    conversationId:
+      mode === "ide" || mode === "cli"
+        ? (effectiveCurrentConversation?.id ?? null)
+        : null,
   });
+
+  useEffect(() => {
+    if (mode === "ide" || mode === "cli") {
+      sandboxConversationIdRef.current = effectiveCurrentConversation?.id ?? null;
+      return;
+    }
+    sandboxConversationIdRef.current = null;
+  }, [mode, effectiveCurrentConversation?.id]);
 
   const handleToolCall = useCallback(
     async (toolCall: ToolCall): Promise<unknown> => {
@@ -100,7 +115,7 @@ export function LiveChat({
           const rawPath = String(args.path ?? "");
           if (!rawPath.trim()) return { error: "Missing path" };
           const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-          const content = await readFile(path);
+          const content = await readFile(path, sandboxConversationIdRef.current);
           if (content == null) return { error: "File not found" };
           if (content.length > 2000) {
             return {
@@ -129,7 +144,7 @@ export function LiveChat({
             };
           }
 
-          const result = await writeFile(path, content);
+          const result = await writeFile(path, content, sandboxConversationIdRef.current);
           if (!result.ok) {
             return {
               success: false,
@@ -140,7 +155,7 @@ export function LiveChat({
             };
           }
 
-          const refreshed = await readFile(path);
+          const refreshed = await readFile(path, sandboxConversationIdRef.current);
           if (mode === "ide") {
             setSelectedPath(path);
             setOpenedPath(path);
@@ -176,14 +191,14 @@ export function LiveChat({
           const path = args.path as string;
           const ok = window.confirm(`Delete ${path}?`);
           if (!ok) return { cancelled: true };
-          const success = await deleteFile(path);
+          const success = await deleteFile(path, sandboxConversationIdRef.current);
           return success ? { success: true } : { error: "Delete failed" };
         }
         case "run_command": {
           const command = args.command as string;
           const ok = window.confirm(`Run command?\n\n${command}`);
           if (!ok) return { cancelled: true };
-          const result = await execCommand(command);
+          const result = await execCommand(command, sandboxConversationIdRef.current);
           return result;
         }
         case "search_files": {
@@ -203,7 +218,7 @@ export function LiveChat({
           const results: string[] = [];
 
           for (const f of targetFiles) {
-            const content = await readFile(f.path);
+            const content = await readFile(f.path, sandboxConversationIdRef.current);
             if (content == null) continue;
             const lines = content.split("\n");
             for (let i = 0; i < lines.length; i++) {
@@ -293,6 +308,37 @@ export function LiveChat({
   }, [mode, conversations, effectiveCurrentConversation, lastConversationByMode, selectConversation]);
 
   useEffect(() => {
+    if (!isAuthed) return;
+    if (mode !== "ide" && mode !== "cli") return;
+    if (effectiveCurrentConversation) return;
+    if (conversations.length > 0) return;
+    if (convLoading) return;
+    let cancelled = false;
+    void (async () => {
+      const created = await createConversation();
+      if (cancelled) return;
+      if (!created?.id) {
+        setConversationError("Failed to create conversation. Please try again.");
+        return;
+      }
+      sandboxConversationIdRef.current = created.id;
+      await selectConversation(created.id);
+      setConversationError(null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isAuthed,
+    mode,
+    effectiveCurrentConversation,
+    conversations.length,
+    convLoading,
+    createConversation,
+    selectConversation,
+  ]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -307,6 +353,7 @@ export function LiveChat({
         const created = await createConversation();
         effectiveConversationId = created?.id ?? null;
         if (created?.id) {
+          sandboxConversationIdRef.current = created.id;
           await selectConversation(created.id);
           setConversationError(null);
         } else {
@@ -318,7 +365,7 @@ export function LiveChat({
       }
 
       if ((mode === "ide" || mode === "cli") && files.length === 0) {
-        await initSandbox();
+        await initSandbox(false, effectiveConversationId);
       }
 
       await sendMessage(content, { conversationId: effectiveConversationId });
@@ -339,9 +386,13 @@ export function LiveChat({
   const handleSaveFile = useCallback(
     async (path: string, content: string) => {
       if (!path) return;
-      const result = await writeFile(path, content);
-      if (!result.ok) return;
-      const refreshed = await readFile(result.file.path ?? path);
+      const result = await writeFile(path, content, sandboxConversationIdRef.current);
+      if (!result.ok) {
+        setConversationError(`Failed to save ${path}: ${result.error}`);
+        return;
+      }
+      setConversationError(null);
+      const refreshed = await readFile(result.file.path ?? path, sandboxConversationIdRef.current);
       if (path === openedPath) {
         setSelectedContent(refreshed ?? "");
       }
@@ -354,7 +405,7 @@ export function LiveChat({
       if (!path) return;
       setSelectedPath(path);
       setSelectedContent("");
-      const content = await readFile(path);
+      const content = await readFile(path, sandboxConversationIdRef.current);
       setOpenedPath(path);
       setSelectedContent(content ?? "");
     },
@@ -368,11 +419,15 @@ export function LiveChat({
   }, [mode, selectedPath, files, handleFileSelect]);
 
   if (!isAuthed) {
+    const authHint =
+      mode === "finance"
+        ? "Please sign in to use Finance live mode."
+        : "Please sign in to use live features. Real provider is currently enabled in Finance mode.";
     return (
       <div className="live-chat__auth">
         <div className="live-chat__auth-message">
           <span className="live-chat__auth-icon">🔐</span>
-          <span>Please sign in to use the real LLM interaction feature.</span>
+          <span>{authHint}</span>
           <a href="/api/auth/signin" className="live-chat__auth-link">Sign in with GitHub</a>
         </div>
       </div>
@@ -384,8 +439,9 @@ export function LiveChat({
   const onDismissError = () => {
     clearMessages();
     setConversationError(null);
+    clearSandboxError();
   };
-  const displayError = conversationError ?? chatError;
+  const displayError = conversationError ?? chatError ?? sandboxError;
 
   if (mode === "ide") {
     return (

@@ -17,7 +17,7 @@ This document highlights project-specific settings and memory points for the nex
 
 ## Provider and observability behavior
 
-- `POST /api/chat/stream` uses mock streaming by default; it switches to real streaming when the user is authenticated, `OPENAI_API_KEY` is present, and the request does not explicitly disable real mode.
+- `POST /api/chat/stream` uses mock streaming by default; it switches to real streaming only in `finance` mode when the user is authenticated, `OPENAI_API_KEY` is present, and the request does not explicitly disable real mode.
 - Metrics and traces are stored in an in-memory global store and exposed via `/api/metrics` and `/api/debug/traces` (they reset on server restart).
 
 ## UI behavior

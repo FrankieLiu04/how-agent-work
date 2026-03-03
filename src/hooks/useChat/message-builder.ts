@@ -70,6 +70,7 @@ export function createWorkingUpdater(
   updateWorking: (updater: (prev?: WorkingState) => WorkingState | undefined) => void;
   appendWorkingSummary: (text: string) => void;
   setWorkingStatus: (status: WorkingState["status"]) => void;
+  getCurrentWorking: () => WorkingState | undefined;
 } {
   let currentWorking: WorkingState | undefined;
 
@@ -100,5 +101,7 @@ export function createWorkingUpdater(
     }));
   };
 
-  return { updateWorking, appendWorkingSummary, setWorkingStatus };
+  const getCurrentWorking = () => currentWorking;
+
+  return { updateWorking, appendWorkingSummary, setWorkingStatus, getCurrentWorking };
 }

@@ -1,12 +1,59 @@
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
+import { SANDBOX_LIMITS } from "~/lib/config";
+import {
+  buildScopePrefix,
+  fromStoredPath,
+  getScopeRoot,
+  isReservedSandboxPath,
+  normalizeUserPath,
+  toStoredPath,
+} from "~/lib/sandbox/scope";
 
 // Limits
-const MAX_FILES_PER_USER = 20;
-const MAX_FILE_SIZE_BYTES = 5 * 1024; // 5KB
-const MAX_TOTAL_SIZE_BYTES = 100 * 1024; // 100KB
+const MAX_FILES_PER_USER = SANDBOX_LIMITS.MAX_FILES_PER_USER;
+const MAX_FILE_SIZE_BYTES = SANDBOX_LIMITS.MAX_FILE_SIZE_BYTES;
+const MAX_TOTAL_SIZE_BYTES = SANDBOX_LIMITS.MAX_TOTAL_SIZE_BYTES;
 
-export async function GET(): Promise<Response> {
+function whereForScope(userId: string, conversationId: string | null) {
+  if (conversationId) {
+    return {
+      userId,
+      path: {
+        startsWith: `${buildScopePrefix(conversationId)}/`,
+      },
+    };
+  }
+
+  return {
+    userId,
+    NOT: {
+      path: {
+        startsWith: `${getScopeRoot()}/`,
+      },
+    },
+  };
+}
+
+async function ensureScopeAccess(userId: string, conversationId: string | null): Promise<Response | null> {
+  if (!conversationId) return null;
+  const conversation = await db.conversation.findFirst({
+    where: {
+      id: conversationId,
+      userId,
+    },
+    select: { id: true },
+  });
+  if (!conversation) {
+    return new Response(JSON.stringify({ error: "Conversation not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return null;
+}
+
+export async function GET(request: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -15,8 +62,13 @@ export async function GET(): Promise<Response> {
     });
   }
 
+  const url = new URL(request.url);
+  const conversationId = url.searchParams.get("conversationId");
+  const scopeError = await ensureScopeAccess(session.user.id, conversationId);
+  if (scopeError) return scopeError;
+
   const files = await db.virtualFile.findMany({
-    where: { userId: session.user.id },
+    where: whereForScope(session.user.id, conversationId),
     orderBy: { path: "asc" },
     select: {
       id: true,
@@ -29,11 +81,13 @@ export async function GET(): Promise<Response> {
   });
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const fileCount = files.filter((f) => !f.isDir).length;
 
   return new Response(
     JSON.stringify({
       files: files.map((f) => ({
         ...f,
+        path: fromStoredPath(f.path, conversationId),
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
       })),
@@ -41,7 +95,7 @@ export async function GET(): Promise<Response> {
         maxFiles: MAX_FILES_PER_USER,
         maxFileSize: MAX_FILE_SIZE_BYTES,
         maxTotalSize: MAX_TOTAL_SIZE_BYTES,
-        currentFileCount: files.length,
+        currentFileCount: fileCount,
         currentTotalSize: totalSize,
       },
     }),
@@ -61,7 +115,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  let body: { path: string; content?: string; isDir?: boolean };
+  let body: { path: string; content?: string; isDir?: boolean; conversationId?: string | null };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -78,8 +132,19 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
+  const conversationId = body.conversationId ?? null;
+  const scopeError = await ensureScopeAccess(session.user.id, conversationId);
+  if (scopeError) return scopeError;
+
   try {
-    const path = body.path.startsWith("/") ? body.path : `/${body.path}`;
+    const path = normalizeUserPath(body.path);
+    if (isReservedSandboxPath(path)) {
+      return new Response(JSON.stringify({ error: "Invalid path" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const storedPath = toStoredPath(path, conversationId);
     const content = body.content ?? "";
     const isDir = body.isDir ?? false;
     const size = isDir ? 0 : new TextEncoder().encode(content).length;
@@ -100,17 +165,17 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const existing = await db.virtualFile.findUnique({
-      where: {
-        userId_path: {
-          userId: session.user.id,
-          path,
+        where: {
+          userId_path: {
+            userId: session.user.id,
+            path: storedPath,
+          },
         },
-      },
-    });
+      });
 
     if (existing) {
       const currentStats = await db.virtualFile.aggregate({
-        where: { userId: session.user.id },
+        where: whereForScope(session.user.id, conversationId),
         _sum: { size: true },
       });
       const currentTotal = currentStats._sum.size ?? 0;
@@ -135,7 +200,7 @@ export async function POST(request: Request): Promise<Response> {
         where: {
           userId_path: {
             userId: session.user.id,
-            path,
+            path: storedPath,
           },
         },
         data: {
@@ -148,7 +213,7 @@ export async function POST(request: Request): Promise<Response> {
       return new Response(
         JSON.stringify({
           id: updated.id,
-          path: updated.path,
+          path,
           size: updated.size,
           isDir: updated.isDir,
           createdAt: updated.createdAt.toISOString(),
@@ -162,10 +227,13 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const fileCount = await db.virtualFile.count({
-      where: { userId: session.user.id },
+      where: {
+        ...whereForScope(session.user.id, conversationId),
+        isDir: false,
+      },
     });
 
-    if (fileCount >= MAX_FILES_PER_USER) {
+    if (!isDir && fileCount >= MAX_FILES_PER_USER) {
       return new Response(
         JSON.stringify({
           error: "file_limit_reached",
@@ -181,7 +249,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const currentStats = await db.virtualFile.aggregate({
-      where: { userId: session.user.id },
+      where: whereForScope(session.user.id, conversationId),
       _sum: { size: true },
     });
     const currentTotal = currentStats._sum.size ?? 0;
@@ -204,11 +272,12 @@ export async function POST(request: Request): Promise<Response> {
     const parts = path.split("/").filter(Boolean);
     for (let i = 1; i < parts.length; i++) {
       const parentPath = "/" + parts.slice(0, i).join("/");
+      const storedParentPath = toStoredPath(parentPath, conversationId);
       const existingParent = await db.virtualFile.findUnique({
         where: {
           userId_path: {
             userId: session.user.id,
-            path: parentPath,
+            path: storedParentPath,
           },
         },
         select: { isDir: true },
@@ -230,12 +299,12 @@ export async function POST(request: Request): Promise<Response> {
         where: {
           userId_path: {
             userId: session.user.id,
-            path: parentPath,
+            path: storedParentPath,
           },
         },
         create: {
           userId: session.user.id,
-          path: parentPath,
+          path: storedParentPath,
           content: "",
           isDir: true,
           size: 0,
@@ -247,7 +316,7 @@ export async function POST(request: Request): Promise<Response> {
     const created = await db.virtualFile.create({
       data: {
         userId: session.user.id,
-        path,
+        path: storedPath,
         content,
         isDir,
         size,
@@ -257,7 +326,7 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(
       JSON.stringify({
         id: created.id,
-        path: created.path,
+        path,
         size: created.size,
         isDir: created.isDir,
         createdAt: created.createdAt.toISOString(),
@@ -288,6 +357,7 @@ export async function DELETE(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const path = url.searchParams.get("path");
+  const conversationId = url.searchParams.get("conversationId");
 
   if (!path) {
     return new Response(JSON.stringify({ error: "Path is required" }), {
@@ -296,14 +366,24 @@ export async function DELETE(request: Request): Promise<Response> {
     });
   }
 
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const scopeError = await ensureScopeAccess(session.user.id, conversationId);
+  if (scopeError) return scopeError;
+
+  const normalizedPath = normalizeUserPath(path);
+  if (isReservedSandboxPath(normalizedPath)) {
+    return new Response(JSON.stringify({ error: "Invalid path" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const storedPath = toStoredPath(normalizedPath, conversationId);
 
   // Check if file exists
   const file = await db.virtualFile.findUnique({
     where: {
       userId_path: {
         userId: session.user.id,
-        path: normalizedPath,
+        path: storedPath,
       },
     },
   });
@@ -321,7 +401,7 @@ export async function DELETE(request: Request): Promise<Response> {
       where: {
         userId: session.user.id,
         path: {
-          startsWith: normalizedPath + "/",
+          startsWith: storedPath + "/",
         },
       },
     });
@@ -344,7 +424,7 @@ export async function DELETE(request: Request): Promise<Response> {
     where: {
       userId_path: {
         userId: session.user.id,
-        path: normalizedPath,
+        path: storedPath,
       },
     },
   });
