@@ -419,15 +419,11 @@ export function LiveChat({
   }, [mode, selectedPath, files, handleFileSelect]);
 
   if (!isAuthed) {
-    const authHint =
-      mode === "finance"
-        ? "Please sign in to use Finance live mode."
-        : "Please sign in to use live features. Real provider is currently enabled in Finance mode.";
     return (
       <div className="live-chat__auth">
         <div className="live-chat__auth-message">
           <span className="live-chat__auth-icon">🔐</span>
-          <span>{authHint}</span>
+          <span>Please sign in to use real-time interaction features.</span>
           <a href="/api/auth/signin" className="live-chat__auth-link">Sign in with GitHub</a>
         </div>
       </div>

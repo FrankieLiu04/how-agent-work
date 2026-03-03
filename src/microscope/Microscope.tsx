@@ -153,7 +153,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
             <button
               className={`view-btn ${viewMode === "live" ? "active" : ""}`}
               onClick={() => handleViewModeChange("live")}
-              title="Live interaction (Finance uses real provider; Chat/Agent/IDE/CLI run mock or sandbox workflows)"
+              title="Real LLM interaction (requires sign-in and API key)"
             >
               ⚡ 实时
             </button>
@@ -161,7 +161,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           <div className="auth-panel">
             {viewMode === "live" && (
               <span className="auth-name">
-                Live: Finance uses real provider; Chat/Agent/IDE/CLI run mock or sandbox workflows.
+                Live: real provider is used when available; otherwise it falls back to mock.
               </span>
             )}
             <a className="auth-btn" href="/api/metrics" target="_blank" rel="noreferrer">
@@ -306,7 +306,7 @@ export function Microscope(props: { isAuthed: boolean; userName: string | null }
           </footer>
         </>
       ) : (
-        // Live mode - finance real provider + other modes mock/sandbox
+        // Live mode - real provider when available
         <main
           id="mainStage"
           className={`live-stage live-stage--wide-client${currentMode === "ide" ? " live-stage--mode-ide" : ""}`}

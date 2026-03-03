@@ -81,7 +81,7 @@ export async function handleChatStream(context: StreamHandlerContext): Promise<S
 
   let quota: Awaited<ReturnType<typeof consumeHourlyQuota>> | null = null;
   const requestedReal = Boolean(userId && env.OPENAI_API_KEY && body.x_use_real !== false);
-  const useReal = requestedReal && mode === "finance";
+  const useReal = requestedReal;
   trace.provider = useReal ? "deepseek" : "mock";
 
   if (useReal && userId) {
