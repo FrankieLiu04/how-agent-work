@@ -21,6 +21,7 @@ import {
   buildToolWireMessage,
   createWorkingUpdater,
 } from "./message-builder";
+import { mergeToolCallDelta } from "./tool-call-merge";
 
 export type { ChatMessage, UseChatOptions, UseChatReturn };
 export type { ChatMode, ProtocolEvent };
@@ -368,43 +369,7 @@ export function useChat({
 
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            const existing = toolCallIndexMap.get(idx);
-
-            if (existing != null) {
-              existing.rawArgs += tc.function?.arguments ?? "";
-              if (tc.id && toolCalls[existing.arrayIndex]) {
-                toolCalls[existing.arrayIndex] = {
-                  ...toolCalls[existing.arrayIndex]!,
-                  id: tc.id,
-                };
-              }
-              try {
-                const args = JSON.parse(existing.rawArgs) as Record<string, unknown>;
-                toolCalls[existing.arrayIndex] = {
-                  ...toolCalls[existing.arrayIndex]!,
-                  arguments: args,
-                };
-              } catch {
-                // ignore partial
-              }
-            } else {
-              const rawArgs = tc.function?.arguments ?? "";
-              let args: Record<string, unknown> = {};
-              try {
-                args = JSON.parse(rawArgs) as Record<string, unknown>;
-              } catch {
-                // ignore partial
-              }
-              const arrayIndex = toolCalls.length;
-              toolCalls.push({
-                id: tc.id ?? `pending_${idx}`,
-                name: tc.function?.name ?? "unknown",
-                arguments: args,
-                status: "pending",
-              });
-              toolCallIndexMap.set(idx, { arrayIndex, rawArgs });
-            }
+            mergeToolCallDelta(tc, toolCalls, toolCallIndexMap);
           }
 
           guardedSetMessages((prev) =>
